@@ -1,0 +1,16 @@
+[
+    {
+        "name": "creditCard1",
+        "due_date": "2025-05-20",
+        "amount": 35.0,
+        "category": "Credit Card",
+        "paid_by_paycheck_date": null
+    },
+    {
+        "name": "creditCard2",
+        "due_date": "2025-06-09",
+        "amount": 25.0,
+        "category": "Credit Card",
+        "paid_by_paycheck_date": null
+    }
+]
