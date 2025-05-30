@@ -24,8 +24,6 @@ import json
 #     'paid_by_paycheck_date': datetime.date or None # To link it back to the paycheck that covers it
 # }
 
-# ... (Your existing data structure comments here) ...
-
 # --- Core Functions ---
 
 def get_user_pay_info():
@@ -236,11 +234,6 @@ def load_bills(filename="data/bills.json"):
         print(f"An unexpected error occurred while loading bills: {e}. Starting with no bills.")
     return bills
 
-# src/main.py (continued)
-
-# ... (Your existing imports, data structures, get_user_pay_info, generate_pay_periods,
-#      add_bill, get_user_bills, save_bills, load_bills functions here) ...
-
 def assign_bills_to_paychecks(pay_periods, bills):
     """
     Assigns bills to the earliest possible paycheck based on their due date,
@@ -280,10 +273,6 @@ def assign_bills_to_paychecks(pay_periods, bills):
 
     return assigned_pay_periods, unassigned_bills
 
-# src/main.py (continued)
-
-# ... (Your existing imports, data structures, and other functions here) ...
-
 def display_paycheck_summary(pay_periods, unassigned_bills):
     """
     Displays a comprehensive summary of each pay period, including assigned bills
@@ -320,10 +309,6 @@ def display_paycheck_summary(pay_periods, unassigned_bills):
     print("\n" + "="*50)
     print("                 END OF OVERVIEW")
     print("="*50)
-
-# src/main.py (updated main block)
-
-# src/main.py (updated main block)
 
 if __name__ == "__main__":
     print("--- Welcome to Monte Buster ---")
