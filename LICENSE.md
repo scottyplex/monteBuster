@@ -1,6 +1,6 @@
 Business Source License 1.1
 
-Portions Copyright <YEAR> <COPYRIGHT HOLDER>
+Portions Copyright Copyright 2025 Scott B Lichty
 
 The Business Source License 1.1 (this "License") is a "source available" license.
 The terms of this License are subject to the following exceptions.
@@ -57,6 +57,3 @@ Unless otherwise expressly stated, the terms of this License apply to:
    of the Software. If any provision of this License is found to be invalid or unenforceable,
    the remaining provisions will remain in full force and effect.
    The terms of this License may not be modified or waived except in a writing signed by Licensor.
-
-Please replace <YEAR> and <COPYRIGHT HOLDER> with the actual year and your name/entity.
-For example: Copyright 2025 ScottyPlex
