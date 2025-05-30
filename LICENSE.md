@@ -1,9 +1,3 @@
-Ah, yes! Good catch. Your LICENSE.md file is indeed blank, and we had previously decided on the Business Source License (BSL) for Monte Buster.
-
-The BSL is a great choice because it allows your code to be used for non-production purposes right away (like for personal use, education, or testing), but it provides a period of time (typically 3-5 years) where commercial use might require a different license or specific agreement from you. After that period, it usually converts to a standard open-source license like Apache 2.0 or MIT. This gives you some protection for your initial work while still being "source available."
-
-Here is the full text of the Business Source License 1.1 for you to copy and paste directly into your LICENSE.md file.
-
 Business Source License 1.1
 
 Portions Copyright <YEAR> <COPYRIGHT HOLDER>
