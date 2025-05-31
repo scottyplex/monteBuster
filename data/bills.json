@@ -1,16 +1,32 @@
 [
     {
-        "name": "creditCard1",
-        "due_date": "2025-05-20",
-        "amount": 35.0,
-        "category": "Credit Card",
+        "id": "Rent-20250601",
+        "name": "Rent",
+        "due_date": "2025-06-01",
+        "amount": 1000.0,
+        "category": "Rent",
+        "is_recurring": true,
+        "recurrence_frequency": "monthly",
         "paid_by_paycheck_date": null
     },
     {
-        "name": "creditCard2",
-        "due_date": "2025-06-09",
-        "amount": 25.0,
-        "category": "Credit Card",
+        "id": "Pool Dues-20250620",
+        "name": "Pool Dues",
+        "due_date": "2025-06-20",
+        "amount": 50.0,
+        "category": "Hobby",
+        "is_recurring": false,
+        "recurrence_frequency": null,
+        "paid_by_paycheck_date": null
+    },
+    {
+        "id": "Car Payment-20250620",
+        "name": "Car Payment",
+        "due_date": "2025-06-20",
+        "amount": 704.0,
+        "category": "Car Payment",
+        "is_recurring": true,
+        "recurrence_frequency": "monthly",
         "paid_by_paycheck_date": null
     }
 ]

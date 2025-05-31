@@ -1,0 +1,32 @@
+Date,Type,Description,Amount,Balance_Impact,Running_Balance_After_Transaction
+2025-05-30,Paycheck,Net Pay Received,3104.96,+3104.96,3104.96
+2025-06-01,Bill Payment,Rent,-1000.0,-1000.00,2104.96
+2025-06-13,Paycheck,Net Pay Received,3104.96,+3104.96,5209.92
+2025-06-20,Bill Payment,Pool Dues,-50.0,-50.00,5159.92
+2025-06-20,Bill Payment,Car Payment,-704.0,-704.00,4455.92
+2025-06-27,Paycheck,Net Pay Received,3104.96,+3104.96,7560.88
+2025-07-01,Bill Payment,Rent,-1000.0,-1000.00,6560.88
+2025-07-11,Paycheck,Net Pay Received,3104.96,+3104.96,9665.84
+2025-07-20,Bill Payment,Car Payment,-704.0,-704.00,8961.84
+2025-07-25,Paycheck,Net Pay Received,3104.96,+3104.96,12066.80
+2025-08-01,Bill Payment,Rent,-1000.0,-1000.00,11066.80
+2025-08-08,Paycheck,Net Pay Received,3104.96,+3104.96,14171.76
+2025-08-20,Bill Payment,Car Payment,-704.0,-704.00,13467.76
+2025-08-22,Paycheck,Net Pay Received,3104.96,+3104.96,16572.72
+2025-09-01,Bill Payment,Rent,-1000.0,-1000.00,15572.72
+2025-09-05,Paycheck,Net Pay Received,3104.96,+3104.96,18677.68
+2025-09-19,Paycheck,Net Pay Received,3104.96,+3104.96,21782.64
+2025-09-20,Bill Payment,Car Payment,-704.0,-704.00,21078.64
+2025-10-01,Bill Payment,Rent,-1000.0,-1000.00,20078.64
+2025-10-03,Paycheck,Net Pay Received,3104.96,+3104.96,23183.60
+2025-10-17,Paycheck,Net Pay Received,3104.96,+3104.96,26288.56
+2025-10-20,Bill Payment,Car Payment,-704.0,-704.00,25584.56
+2025-10-31,Paycheck,Net Pay Received,3104.96,+3104.96,28689.52
+2025-11-01,Bill Payment,Rent,-1000.0,-1000.00,27689.52
+2025-11-14,Paycheck,Net Pay Received,3104.96,+3104.96,30794.48
+2025-11-20,Bill Payment,Car Payment,-704.0,-704.00,30090.48
+2025-11-28,Paycheck,Net Pay Received,3104.96,+3104.96,33195.44
+2025-12-01,Bill Payment,Rent,-1000.0,-1000.00,32195.44
+2025-12-12,Paycheck,Net Pay Received,3104.96,+3104.96,35300.40
+2025-12-20,Bill Payment,Car Payment,-704.0,-704.00,34596.40
+2025-12-26,Paycheck,Net Pay Received,3104.96,+3104.96,37701.36
