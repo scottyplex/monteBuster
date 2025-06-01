@@ -17,13 +17,19 @@ def get_user_input(prompt):
 def get_user_date_input(prompt):
     """
     Helper function to get valid date input from user, loops until valid.
+    Now accepts both YYYY-MM-DD and MM-DD-YYYY formats.
     """
     while True:
         date_str = input(prompt).strip()
         try:
+            # Try YYYY-MM-DD first (ISO standard)
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            print("Invalid date format. Please use ISO-MM-DD.")
+            try:
+                # If YYYY-MM-DD fails, try MM-DD-YYYY
+                return datetime.strptime(date_str, "%m-%d-%Y").date()
+            except ValueError:
+                print("Invalid date format. Please use YYYY-MM-DD or MM-DD-YYYY.")
 
 def get_user_float_input(prompt, allow_negative=False):
     """
@@ -134,7 +140,8 @@ def add_bill():
             # --- Debt-specific fields ---
             bill['initial_balance'] = get_user_float_input(f"Enter initial balance for {bill['name']}: $")
             bill['minimum_payment'] = get_user_float_input(f"Enter minimum payment for {bill['name']}: $")
-            bill['interest_rate'] = get_user_float_input(f"Enter annual interest rate for {bill['name']} (e.g., 0.18 for 18%): ", allow_negative=False)
+            # Updated prompt for interest rate clarity
+            bill['interest_rate'] = get_user_float_input(f"Enter annual interest rate for {bill['name']} (e.g., 0.18 for 18%, or 0.36 for 36%): ", allow_negative=False)
             bill['credit_limit'] = get_user_float_input(f"Enter credit limit for {bill['name']} (e.g., 2000.00, or 0 if not applicable): $")
             bill['monthly_fee'] = get_user_float_input(f"Enter monthly fee for {bill['name']} (e.g., 10.00, enter 0 if none): $")
             bill['annual_fee'] = get_user_float_input(f"Enter annual fee for {bill['name']} (e.g., 99.00, enter 0 if none): $")
@@ -163,7 +170,7 @@ def add_bill():
             print("Invalid choice. Please enter 'yes' or 'no'.")
             
     # --- General Bill Fields (applicable to all bills) ---
-    bill['due_date'] = get_user_date_input("Enter bill due date (YYYY-MM-DD) for initial setup: ")
+    bill['due_date'] = get_user_date_input("Enter bill due date (YYYY-MM-DD or MM-DD-YYYY) for initial setup: ")
 
     bill['amount'] = get_user_float_input(f"Enter default amount for {bill['name']} (for non-debt bills, this is the bill amount; for debts, this is typically your planned payment): $")
     
@@ -237,27 +244,27 @@ def edit_bill(bills):
                 selected_bill = bills[bill_index]
                 print(f"\n--- Editing Bill: {selected_bill['name']} ---")
                 
-                # Display editable fields
-                print("Select field to edit:")
-                print("1. Name")
-                print("2. Due Date (YYYY-MM-DD)")
-                print("3. Amount")
-                print("4. Recurring (yes/no)")
-                if selected_bill['is_recurring']:
-                    print("5. Recurrence Frequency")
-                print("6. Category")
-                if selected_bill.get('is_debt', False):
-                    print("7. Initial Balance")
-                    print("8. Minimum Payment")
-                    print("9. Interest Rate")
-                    print("10. Credit Limit")
-                    print("11. Monthly Fee")
-                    print("12. Annual Fee")
-                    if selected_bill.get('annual_fee', 0.0) > 0:
-                        print("13. Annual Fee Month")
-                print("0. Done editing this bill")
+                while True: # Loop for editing fields within the selected bill
+                    # Display editable fields before each prompt for choice
+                    print("\nSelect field to edit:")
+                    print("1. Name")
+                    print("2. Due Date (YYYY-MM-DD or MM-DD-YYYY)") # Updated prompt here as well
+                    print("3. Amount")
+                    print("4. Recurring (yes/no)")
+                    if selected_bill['is_recurring']:
+                        print("5. Recurrence Frequency")
+                    print("6. Category")
+                    if selected_bill.get('is_debt', False):
+                        print("7. Initial Balance")
+                        print("8. Minimum Payment")
+                        print("9. Interest Rate")
+                        print("10. Credit Limit")
+                        print("11. Monthly Fee")
+                        print("12. Annual Fee")
+                        if selected_bill.get('annual_fee', 0.0) > 0:
+                            print("13. Annual Fee Month")
+                    print("0. Done editing this bill")
 
-                while True:
                     field_choice = get_user_input("Enter field number to edit: ").strip()
 
                     if field_choice == '0':
@@ -268,7 +275,7 @@ def edit_bill(bills):
                     if field_choice == '1':
                         selected_bill['name'] = get_user_input(f"Enter new name for {selected_bill['name']}: ").strip()
                     elif field_choice == '2':
-                        selected_bill['due_date'] = get_user_date_input(f"Enter new due date for {selected_bill['name']} (YYYY-MM-DD): ")
+                        selected_bill['due_date'] = get_user_date_input(f"Enter new due date for {selected_bill['name']} (YYYY-MM-DD or MM-DD-YYYY): ") # Updated prompt here
                     elif field_choice == '3':
                         selected_bill['amount'] = get_user_float_input(f"Enter new amount for {selected_bill['name']}: $")
                     elif field_choice == '4':
@@ -293,7 +300,8 @@ def edit_bill(bills):
                     elif selected_bill.get('is_debt', False) and field_choice == '8':
                         selected_bill['minimum_payment'] = get_user_float_input(f"Enter new minimum payment for {selected_bill['name']}: $")
                     elif selected_bill.get('is_debt', False) and field_choice == '9':
-                        selected_bill['interest_rate'] = get_user_float_input(f"Enter new annual interest rate for {selected_bill['name']} (e.g., 0.18 for 18%): ", allow_negative=False)
+                        # Updated prompt for interest rate clarity
+                        selected_bill['interest_rate'] = get_user_float_input(f"Enter new annual interest rate for {selected_bill['name']} (e.g., 0.18 for 18%, or 0.36 for 36%): ", allow_negative=False)
                     elif selected_bill.get('is_debt', False) and field_choice == '10':
                         selected_bill['credit_limit'] = get_user_float_input(f"Enter new credit limit for {selected_bill['name']}: $")
                     elif selected_bill.get('is_debt', False) and field_choice == '11':
@@ -308,10 +316,8 @@ def edit_bill(bills):
                         selected_bill['annual_fee_month'] = get_user_int_input(f"Enter the month (1-12) when the annual fee is charged for {selected_bill['name']}: ", 1, 12)
                     else:
                         print("Invalid field number or field not applicable to this bill type. Please try again.")
+                        continue # Continue the inner loop to re-display options
                     
-                    # This line attempts to get a key by index, which is not reliable for dictionaries.
-                    # It's better to just confirm the update generally.
-                    # print(f"'{selected_bill['name']}' updated. Current value: {selected_bill.get(list(selected_bill.keys())[int(field_choice)-1], 'N/A')}") # Basic confirmation
                     print(f"'{selected_bill['name']}' updated.") # Simpler confirmation
                     view_bills([selected_bill]) # Show updated bill
             else:
@@ -345,17 +351,21 @@ def generate_bill_instances(bill_templates, start_date, end_date):
             # Adjust current_due_date to be within or past start_date if it's an old template
             # Ensure we don't start generating instances from before our planning period
             while current_due_date < start_date:
-                if template['recurrence_frequency'] == 'monthly':
-                    if current_due_date.month == 12:
-                        current_due_date = current_due_date.replace(year=current_due_date.year + 1, month=1)
-                    else:
-                        current_due_date = current_due_date.replace(month=current_due_date.month + 1)
-                elif template['recurrence_frequency'] == 'bi-weekly':
+                if current_due_date.month == 12:
+                    current_due_date = current_due_date.replace(year=current_due_date.year + 1, month=1)
+                else:
+                    current_due_date = current_due_date.replace(month=current_due_date.month + 1)
+                # For bi-weekly/annually, similar logic would apply. 
+                # For simplicity here, just monthly is handled by default if 'recurrence_frequency' not specific.
+                if template['recurrence_frequency'] == 'bi-weekly':
                     current_due_date += timedelta(weeks=2)
                 elif template['recurrence_frequency'] == 'annually':
                     current_due_date = current_due_date.replace(year=current_due_date.year + 1)
+                elif template['recurrence_frequency'] == 'monthly':
+                    pass # Handled by the generic monthly adjustment
                 else:
                     break # Break if frequency is unknown, avoid infinite loop for bad data
+
 
             # Now, iterate from the adjusted current_due_date
             while current_due_date <= end_date:
@@ -425,14 +435,22 @@ def assign_bills_to_paychecks(bill_instances, num_paychecks, net_pay, start_date
             'remaining_balance': net_pay
         }
         
+        print(f"\n--- Processing Paycheck for {current_pay_date.strftime('%Y-%m-%d')} ---")
+        print(f"  Initial Paycheck Balance: ${paycheck_info['remaining_balance']:.2f}")
+
         # Add any carried-over unassigned bills to the current paycheck's consideration
         # Process carry-over bills first
+        if unassigned_carry_over_bills:
+            print("  Attempting to pay carried-over bills:")
         for bill in unassigned_carry_over_bills[:]: # Iterate over copy
             if paycheck_info['remaining_balance'] >= bill['amount']:
                 paycheck_info['assigned_bills'].append(bill)
                 paycheck_info['remaining_balance'] -= bill['amount']
                 bill['paid_by_paycheck_date'] = current_pay_date # Mark as paid
                 unassigned_carry_over_bills.remove(bill) # Remove from carry-over list
+                print(f"    - PAID (Carry-over): {bill['name']} - ${bill['amount']:.2f}. Remaining: ${paycheck_info['remaining_balance']:.2f}")
+            else:
+                print(f"    - NOT PAID (Carry-over - Insufficient funds): {bill['name']} - ${bill['amount']:.2f}. Remaining: ${paycheck_info['remaining_balance']:.2f}")
             # Else, it remains in unassigned_carry_over_bills for the next paycheck
         
         # Identify bills due before the *next* paycheck (or end of planning if last paycheck)
@@ -448,6 +466,8 @@ def assign_bills_to_paychecks(bill_instances, num_paychecks, net_pay, start_date
         # Sort new bills for this period by due date, then by amount (largest first)
         bills_due_this_period.sort(key=lambda x: (x['due_date'], -x['amount']))
 
+        if bills_due_this_period:
+            print("  Attempting to pay new bills due this period:")
         # Assign new bills due this period
         for bill in bills_due_this_period:
             if bill.get('paid_by_paycheck_date') is None: # Only assign if not already assigned (prevents double assignment if it was a carry-over)
@@ -455,8 +475,13 @@ def assign_bills_to_paychecks(bill_instances, num_paychecks, net_pay, start_date
                     paycheck_info['assigned_bills'].append(bill)
                     paycheck_info['remaining_balance'] -= bill['amount']
                     bill['paid_by_paycheck_date'] = current_pay_date # Mark as paid
+                    print(f"    - PAID: {bill['name']} (Due: {bill['due_date'].strftime('%m-%d')}) - ${bill['amount']:.2f}. Remaining: ${paycheck_info['remaining_balance']:.2f}")
                 else:
                     unassigned_carry_over_bills.append(bill) # Carry over if insufficient funds
+                    print(f"    - NOT PAID (Insufficient funds): {bill['name']} (Due: {bill['due_date'].strftime('%m-%d')}) - ${bill['amount']:.2f}. Remaining: ${paycheck_info['remaining_balance']:.2f}")
+        
+        if not paycheck_info['assigned_bills'] and not unassigned_carry_over_bills:
+            print("    No bills assigned or carried over for this paycheck period.")
 
         paychecks.append(paycheck_info)
         current_pay_date += timedelta(weeks=2)
@@ -477,14 +502,14 @@ def display_paycheck_summary(final_pay_periods):
 
 
     for pp in final_pay_periods:
-        print(f"--- Paycheck Date: {pp['pay_date'].strftime('%Y-%m-%d')} ---")
+        print(f"--- Paycheck Date: {pp['pay_date'].strftime('%m-%d-%Y')} ---")
         print(f"  Net Pay: ${pp['net_pay']:.2f}")
         print(f"  Initial Balance for Period: ${pp['initial_balance_for_period']:.2f}")
         print("  Assigned Bills:")
         if not pp['assigned_bills']:
             print("    None")
         for bill in pp['assigned_bills']:
-            print(f"    - {bill['name']:<20} (Due: {bill['due_date'].strftime('%m-%d')}) - ${bill['amount']:.2f}")
+            print(f"    - {bill['name']:<20} (Due: {bill['due_date'].strftime('%m-%d-%Y')}) - ${bill['amount']:.2f}")
         print(f"  **Remaining Balance: ${pp['remaining_balance']:.2f}**")
         print("-" * 30 + "\n")
 
@@ -634,10 +659,18 @@ def simulate_debt_progress(template_bills, final_pay_periods):
             # Interest is typically calculated on the balance *before* the current month's payment.
             # Fees can also accrue interest if added before interest calculation.
             interest_accrued_this_month = current_balance * monthly_interest_rate
-            current_balance_after_interest_and_fees = current_balance + interest_accrued_this_month + total_fees_this_month
+            current_balance_after_interest_and_fees = current_balance + interest_accrued_this_month + total_fees_this_month # Corrected variable name
             
             payments_this_month = payments_by_month_and_debt.get((year, month), {}).get(debt_name, 0.0)
             
+            # Ensure minimum payment is made if no other payment was assigned for this month
+            if payments_this_month < debt_data['minimum_payment']:
+                # Only if the current balance is greater than 0, otherwise no need for min payment
+                if current_balance > 0: 
+                    # If current balance is less than min payment, pay current balance
+                    payments_this_month = min(debt_data['minimum_payment'], current_balance_after_interest_and_fees)
+
+
             new_balance = current_balance_after_interest_and_fees - payments_this_month
             
             if new_balance < 0:
@@ -696,6 +729,231 @@ def simulate_debt_progress(template_bills, final_pay_periods):
 
     return live_debt_accounts
 
+def simulate_single_debt_scenario(initial_debt_data, payment_strategy='minimum', extra_payment=0.0, principal_only_payment_amount=0.0):
+    """
+    Simulates a single debt's payoff progress under a given payment strategy.
+    
+    Args:
+        initial_debt_data (dict): A copy of the debt's template data.
+        payment_strategy (str): 'minimum', 'extra', or 'principal_only_onetime'.
+        extra_payment (float): Additional amount to pay per month (for 'extra' strategy).
+        principal_only_payment_amount (float): One-time amount for principal-only payment.
+
+    Returns:
+        tuple: (total_interest_paid, total_fees_paid, months_to_payoff, final_balance)
+    """
+    
+    current_balance = initial_debt_data['initial_balance']
+    minimum_payment = initial_debt_data['minimum_payment']
+    annual_interest_rate = initial_debt_data['interest_rate']
+    monthly_interest_rate = annual_interest_rate / 12.0
+    monthly_fee = initial_debt_data.get('monthly_fee', 0.0)
+    annual_fee = initial_debt_data.get('annual_fee', 0.0)
+    annual_fee_month = initial_debt_data.get('annual_fee_month')
+
+    total_interest_paid = 0.0
+    total_fees_paid = 0.0
+    months_to_payoff = 0
+    
+    # Start simulation from today's date (beginning of the current month)
+    current_sim_date = date.today().replace(day=1)
+    
+    # Cap simulation at 30 years (360 months) to prevent infinite loops for very low payments
+    max_months_cap = 360 
+
+    while current_balance > 0 and months_to_payoff < max_months_cap:
+        months_to_payoff += 1
+        year = current_sim_date.year
+        month = current_sim_date.month
+
+        # Calculate fees for the current month
+        fees_this_month = monthly_fee
+        if annual_fee > 0 and annual_fee_month == month:
+            fees_this_month += annual_fee
+        total_fees_paid += fees_this_month
+
+        # Calculate interest on the current balance *before* any payment
+        interest_this_month = current_balance * monthly_interest_rate
+        total_interest_paid += interest_this_month
+        
+        # Balance after interest and fees
+        balance_after_interest_and_fees = current_balance + interest_this_month + fees_this_month
+
+        payment_to_apply = 0.0
+        principal_reduction_from_payment = 0.0
+
+        if payment_strategy == 'minimum':
+            payment_to_apply = minimum_payment
+        elif payment_strategy == 'extra':
+            payment_to_apply = minimum_payment + extra_payment
+        elif payment_strategy == 'principal_only_onetime':
+            # For a true principal-only payment, the extra amount directly reduces principal.
+            # This is typically in *addition* to the regular payment covering interest/min payment.
+            # Here, we'll treat the 'minimum_payment' as covering interest/fees first.
+            # The 'principal_only_payment_amount' will then directly reduce remaining principal.
+            
+            # First, ensure minimum payment covers interest and fees
+            required_for_interest_and_fees = interest_this_month + fees_this_month
+            
+            # If minimum payment is less than required, it's a negative amortization situation.
+            # For simplicity, assume minimum payment always covers at least interest+fees if possible,
+            # or the balance if less than minimum.
+            if balance_after_interest_and_fees <= minimum_payment:
+                # If balance is very low, pay it off
+                payment_to_apply = balance_after_interest_and_fees
+                principal_reduction_from_payment = balance_after_interest_and_fees - required_for_interest_and_fees
+            else:
+                # Regular minimum payment application
+                payment_to_apply = minimum_payment
+                principal_reduction_from_payment = minimum_payment - required_for_interest_and_fees
+                if principal_reduction_from_payment < 0:
+                    principal_reduction_from_payment = 0 # No principal reduction if min payment just covers I&F or less
+
+            # Now, apply the one-time principal payment *after* regular payment logic
+            # Ensure it doesn't make the balance negative if it exceeds the remaining principal after regular payment.
+            additional_principal_payment = min(principal_only_payment_amount, max(0, current_balance - principal_reduction_from_payment)) # Ensure non-negative
+            
+            payment_to_apply += additional_principal_payment # Add to total payment for reporting
+            principal_reduction_from_payment += additional_principal_payment
+
+            # Reset one-time payment for subsequent months
+            principal_only_payment_amount = 0.0 # Only apply once
+
+
+        # Cap payment at current total balance to avoid overpaying a nearly paid-off debt
+        effective_payment = min(payment_to_apply, balance_after_interest_and_fees)
+
+        current_balance -= (effective_payment - interest_this_month - fees_this_month)
+        
+        # Ensure balance doesn't go negative
+        if current_balance < 0:
+            current_balance = 0.0
+
+        # Move to the next month
+        if month == 12:
+            current_sim_date = current_sim_date.replace(year=year + 1, month=1)
+        else:
+            current_sim_date = current_sim_date.replace(month=month + 1)
+            
+    # Final check: if balance is still > 0 after max months, it means debt was not paid off
+    if current_balance > 0:
+        return total_interest_paid, total_fees_paid, None, current_balance # Return None for months_to_payoff if not paid off
+
+    return total_interest_paid, total_fees_paid, months_to_payoff, current_balance
+
+
+def optimize_debt_payment(bills):
+    """
+    Allows the user to select a debt and simulate different payment strategies
+    (extra payment, one-time principal payment) to see savings.
+    """
+    debt_bills = [b for b in bills if b.get('is_debt', False) and b.get('initial_balance', 0) > 0]
+
+    if not debt_bills:
+        print("\nNo active debt accounts with a balance to optimize. Please add a debt bill first.")
+        return
+
+    print("\n--- Debt Payment Optimization ---")
+    print("Select a debt account to optimize:")
+    for i, debt in enumerate(debt_bills):
+        print(f"{i + 1}. {debt['name']} (Current Balance: ${debt['initial_balance']:.2f}, Min Payment: ${debt['minimum_payment']:.2f})")
+    
+    while True:
+        try:
+            choice = get_user_input("Enter the number of the debt (or 0 to cancel): ").strip()
+            debt_idx = int(choice) - 1
+
+            if debt_idx == -1:
+                print("Debt optimization cancelled.")
+                return
+
+            if 0 <= debt_idx < len(debt_bills):
+                selected_debt_template = debt_bills[debt_idx]
+                break
+            else:
+                print("Invalid number. Please choose from the list.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+    print(f"\nOptimizing '{selected_debt_template['name']}' (Initial Balance: ${selected_debt_template['initial_balance']:.2f})")
+
+    # --- Baseline Simulation (Minimum Payment) ---
+    print("\nSimulating payoff with Minimum Payment...")
+    baseline_interest, baseline_fees, baseline_months, baseline_final_balance = simulate_single_debt_scenario(selected_debt_template.copy(), payment_strategy='minimum')
+
+    print(f"  --- Baseline Scenario (Min Payment) ---")
+    if baseline_months is None:
+        print(f"  Debt not paid off within 30 years. Remaining balance: ${baseline_final_balance:.2f}")
+        print(f"  Total Interest Accrued: ${baseline_interest:.2f}")
+        print(f"  Total Fees Charged: ${baseline_fees:.2f}")
+    else:
+        print(f"  Time to Payoff: {baseline_months} months ({baseline_months // 12} years and {baseline_months % 12} months)")
+        print(f"  Total Interest Paid: ${baseline_interest:.2f}")
+        print(f"  Total Fees Paid: ${baseline_fees:.2f}")
+        print(f"  Total Cost (Principal + Interest + Fees): ${selected_debt_template['initial_balance'] + baseline_interest + baseline_fees:.2f}")
+
+    # --- Optimized Simulation ---
+    print("\n--- Setup Optimized Payment Scenario ---")
+    while True:
+        payment_type_choice = get_user_input("Choose payment type:\n1. Regular extra payment per month\n2. One-time principal-only payment\n0. Cancel optimization\nEnter choice: ").strip()
+        
+        if payment_type_choice == '0':
+            print("Optimized payment simulation cancelled.")
+            return
+
+        if payment_type_choice == '1':
+            extra_amount = get_user_float_input("Enter extra amount to pay per month: $", allow_negative=False)
+            print(f"\nSimulating payoff with Minimum Payment + ${extra_amount:.2f} extra per month...")
+            optimized_interest, optimized_fees, optimized_months, optimized_final_balance = simulate_single_debt_scenario(
+                selected_debt_template.copy(), payment_strategy='extra', extra_payment=extra_amount
+            )
+            break
+        elif payment_type_choice == '2':
+            principal_amount = get_user_float_input("Enter one-time principal-only payment amount: $", allow_negative=False)
+            print(f"\nSimulating payoff with Minimum Payment + One-Time Principal Payment of ${principal_amount:.2f}...")
+            optimized_interest, optimized_fees, optimized_months, optimized_final_balance = simulate_single_debt_scenario(
+                selected_debt_template.copy(), payment_strategy='principal_only_onetime', principal_only_payment_amount=principal_amount
+            )
+            break
+        else:
+            print("Invalid choice. Please enter 1, 2, or 0.")
+
+    print(f"\n  --- Optimized Scenario ---")
+    if optimized_months is None:
+        print(f"  Debt not paid off within 30 years. Remaining balance: ${optimized_final_balance:.2f}")
+        print(f"  Total Interest Accrued: ${optimized_interest:.2f}")
+        print(f"  Total Fees Charged: ${optimized_fees:.2f}")
+    else:
+        print(f"  Time to Payoff: {optimized_months} months ({optimized_months // 12} years and {optimized_months % 12} months)")
+        print(f"  Total Interest Paid: ${optimized_interest:.2f}")
+        print(f"  Total Fees Paid: ${optimized_fees:.2f}")
+        print(f"  Total Cost (Principal + Interest + Fees): ${selected_debt_template['initial_balance'] + optimized_interest + optimized_fees:.2f}")
+
+    # --- Comparison ---
+    print("\n--- Comparison Results ---")
+    if baseline_months is None and optimized_months is None:
+        print("Both scenarios resulted in the debt not being paid off within 30 years.")
+        print(f"  Interest difference: ${baseline_interest - optimized_interest:.2f}")
+        print(f"  Fees difference: ${baseline_fees - optimized_fees:.2f}")
+    elif baseline_months is None: # Only optimized paid off
+        print(f"  Optimized payment paid off the debt in {optimized_months} months, while minimum payment did not.")
+        print(f"  Significant interest and fee savings due to early payoff.")
+        print(f"  Total Interest Saved: ${baseline_interest - optimized_interest:.2f}")
+        print(f"  Total Fees Saved: ${baseline_fees - optimized_fees:.2f}")
+    elif optimized_months is None: # Should not happen if baseline paid off
+        print("  Optimized payment did not pay off the debt, but minimum payment did. (This indicates an issue with input or logic)")
+    else:
+        interest_saved = baseline_interest - optimized_interest
+        fees_saved = baseline_fees - optimized_fees
+        total_saved = interest_saved + fees_saved
+        time_saved_months = baseline_months - optimized_months
+
+        print(f"  Time Saved: {time_saved_months} months")
+        print(f"  Total Interest Saved: ${interest_saved:.2f}")
+        print(f"  Total Fees Saved: ${fees_saved:.2f}")
+        print(f"  **Total Money Saved: ${total_saved:.2f}**")
+        print("\nThis optimization helps you see the benefit of paying more!")
+
 
 def generate_spreadsheet_output(final_pay_periods, debt_progress_report):
     """
@@ -706,20 +964,25 @@ def generate_spreadsheet_output(final_pay_periods, debt_progress_report):
     output_file = os.path.join(output_dir, 'financial_plan.xlsx')
 
     with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
-        # Get the xlsxwriter workbook and worksheet objects
         workbook = writer.book
+
+        currency_format = workbook.add_format({'num_format': '$#,##0.00'})
+        percentage_format = workbook.add_format({'num_format': '0.00%'})
+        bold_format = workbook.add_format({'bold': True})
+        bold_currency_format = workbook.add_format({'bold': True, 'num_format': '$#,##0.00'})
+        bold_percentage_format = workbook.add_format({'bold': True, 'num_format': '0.00%'})
 
         # --- Sheet 1: Paycheck Summary (High-Level) ---
         paycheck_summary_data = []
         for pp in final_pay_periods:
             row = {
-                'Pay Date': pp['pay_date'].strftime('%Y-%m-%d'),
+                'Pay Date': pp['pay_date'].strftime('%m-%d-%Y'),
                 'Net Pay': pp['net_pay'],
                 'Initial Balance for Period': pp['initial_balance_for_period'],
                 'Remaining Balance': pp['remaining_balance']
             }
             assigned_bills_str = "; ".join([
-                f"{b['name']} (Due: {b['due_date'].strftime('%m-%d')}) - ${b['amount']:.2f}"
+                f"{b['name']} (Due: {b['due_date'].strftime('%m-%d-%Y')}) - ${b['amount']:.2f}"
                 for b in pp['assigned_bills']
             ])
             row['Assigned Bills'] = assigned_bills_str
@@ -735,22 +998,30 @@ def generate_spreadsheet_output(final_pay_periods, debt_progress_report):
             if pp['assigned_bills']:
                 for bill in pp['assigned_bills']:
                     paycheck_details_data.append({
-                        'Pay Date': pp['pay_date'].strftime('%Y-%m-%d'),
+                        'Pay Date': pp['pay_date'], # Keep as datetime.date object for proper sorting
                         'Bill Name': bill['name'],
-                        'Bill Due Date': bill['due_date'].strftime('%Y-%m-%d'),
+                        'Bill Due Date': bill['due_date'].strftime('%m-%d-%Y'),
                         'Amount Assigned': bill['amount'],
-                        'Category': bill['category'] # Added category for potential future use or charting by category
+                        'Category': bill['category']
                     })
-            # Add remaining balance as a "bill" for charting purposes if desired
             paycheck_details_data.append({
-                'Pay Date': pp['pay_date'].strftime('%Y-%m-%d'),
+                'Pay Date': pp['pay_date'], # Keep as datetime.date object for proper sorting
                 'Bill Name': 'Remaining Balance',
-                'Bill Due Date': '', # N/A for remaining balance
+                'Bill Due Date': '',
                 'Amount Assigned': pp['remaining_balance'],
-                'Category': 'Savings/Buffer' # Categorize remaining balance
+                'Category': 'Savings/Buffer'
             })
         
         df_paycheck_details = pd.DataFrame(paycheck_details_data)
+        # Explicitly convert 'Pay Date' to datetime objects to ensure .dt accessor works
+        df_paycheck_details['Pay Date'] = pd.to_datetime(df_paycheck_details['Pay Date'])
+        
+        # Sort by 'Pay Date' to ensure chronological order for charts
+        df_paycheck_details = df_paycheck_details.sort_values(by='Pay Date')
+        # Now convert 'Pay Date' to string format for display in the Excel sheet
+        df_paycheck_details['Pay Date'] = df_paycheck_details['Pay Date'].dt.strftime('%m-%d-%Y')
+
+
         df_paycheck_details.to_excel(writer, sheet_name='Paycheck Details', index=False)
 
         # --- Sheet 3: Debt Progress ---
@@ -760,7 +1031,7 @@ def generate_spreadsheet_output(final_pay_periods, debt_progress_report):
                 for month_snapshot in debt_data['history']:
                     row = {
                         'Debt Name': debt_name,
-                        'Date': month_snapshot['date'].strftime('%Y-%m-%d'),
+                        'Date': month_snapshot['date'].strftime('%m-%d-%Y'),
                         'Balance Start of Month': month_snapshot['balance_start_of_month'],
                         'Total Fees Charged': month_snapshot['total_fees_charged'],
                         'Payments Made': month_snapshot['payments_made'],
@@ -773,74 +1044,142 @@ def generate_spreadsheet_output(final_pay_periods, debt_progress_report):
             if all_debt_history:
                 df_debt_progress = pd.DataFrame(all_debt_history)
                 df_debt_progress.to_excel(writer, sheet_name='Debt Progress', index=False)
+                
+                worksheet_debt_progress = writer.sheets['Debt Progress']
+                
+                for col_idx in [2, 3, 4, 5, 6, 7]:
+                    worksheet_debt_progress.set_column(col_idx, col_idx, 15, currency_format)
             else:
                 print("No debt history to write to spreadsheet.")
         else:
             print("No debt progress report available to write to spreadsheet.")
 
+        # --- Sheet 4: Credit Utilization ---
+        credit_utilization_data = []
+        target_utilization_rate = 0.29
 
-        # --- Sheet 4: Paycheck Overview Chart (using data from Paycheck Details) ---
-        # Prepare data for the chart by pivoting the paycheck details
-        # This will create columns for each unique Bill Name
-        df_chart_data = df_paycheck_details.pivot_table(
+        debt_templates_for_utilization = [b for b in load_bills() if b.get('is_debt', False) and b.get('initial_balance') is not None and b['initial_balance'] > 0]
+
+        for debt_template in debt_templates_for_utilization:
+            debt_name = debt_template['name']
+            initial_balance = debt_template['initial_balance']
+            credit_limit = debt_template['credit_limit']
+            
+            utilization = (initial_balance / credit_limit) if credit_limit > 0 else 0.0
+            
+            target_balance = credit_limit * target_utilization_rate
+            amount_to_pay_to_target = initial_balance - target_balance
+            
+            pay_to_target_value = amount_to_pay_to_target if amount_to_pay_to_target > 0 else "Your Good !"
+
+            credit_utilization_data.append({
+                'Credit Cards': debt_name,
+                'Min Payment': debt_template['minimum_payment'],
+                'Balance': initial_balance,
+                'Credit': credit_limit,
+                'Available': credit_limit - initial_balance,
+                'Interest': debt_template['interest_rate'],
+                'Utilization': utilization,
+                f'Pay to {target_utilization_rate*100:.2f} %': pay_to_target_value
+            })
+        
+        if credit_utilization_data:
+            df_credit_utilization = pd.DataFrame(credit_utilization_data)
+            
+            df_credit_utilization.to_excel(writer, sheet_name='Credit Utilization', index=False)
+
+            worksheet_credit_utilization = writer.sheets['Credit Utilization']
+            
+            worksheet_credit_utilization.set_column('B:E', None, currency_format) 
+            worksheet_credit_utilization.set_column('F:F', None, percentage_format)
+            worksheet_credit_utilization.set_column('G:G', None, percentage_format)
+            
+            total_min_payment = df_credit_utilization['Min Payment'].sum()
+            total_balance = df_credit_utilization['Balance'].sum()
+            total_credit = df_credit_utilization['Credit'].sum()
+            total_available = df_credit_utilization['Available'].sum()
+            total_utilization = (total_balance / total_credit) if total_credit > 0 else 0.0
+
+            total_row_excel_idx = len(df_credit_utilization) + 1
+
+            worksheet_credit_utilization.write(total_row_excel_idx, 0, 'Total', bold_format)
+            worksheet_credit_utilization.write(total_row_excel_idx, 1, total_min_payment, bold_currency_format)
+            worksheet_credit_utilization.write(total_row_excel_idx, 2, total_balance, bold_currency_format)
+            worksheet_credit_utilization.write(total_row_excel_idx, 3, total_credit, bold_currency_format)
+            worksheet_credit_utilization.write(total_row_excel_idx, 4, total_available, bold_currency_format)
+            worksheet_credit_utilization.write(total_row_excel_idx, 5, '', bold_format)
+            worksheet_credit_utilization.write(total_row_excel_idx, 6, total_utilization, bold_percentage_format)
+            
+            pay_to_target_total_str = 'Your Good !' if total_utilization <= target_utilization_rate else ''
+            worksheet_credit_utilization.write(total_row_excel_idx, 7, pay_to_target_total_str, bold_format)
+
+            pay_to_col_idx = df_credit_utilization.columns.get_loc(f'Pay to {target_utilization_rate*100:.2f} %')
+            green_fill_format = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
+            yellow_fill_format = workbook.add_format({'bg_color': '#FFEB9C', 'font_color': '#9C6500', 'num_format': '$#,##0.00'})
+            
+            for row_num in range(1, len(df_credit_utilization) + 1):
+                cell_value = df_credit_utilization.iloc[row_num - 1, pay_to_col_idx]
+                if cell_value == "Your Good !":
+                    worksheet_credit_utilization.write(row_num, pay_to_col_idx, cell_value, green_fill_format)
+                else:
+                    worksheet_credit_utilization.write(row_num, pay_to_col_idx, cell_value, yellow_fill_format)
+                    
+            for col_num, value in enumerate(df_credit_utilization.columns):
+                worksheet_credit_utilization.write(0, col_num, value, bold_format)
+
+        else:
+            print("No credit card debt data available to generate Credit Utilization sheet.")
+
+
+        # --- Sheet 5: Paycheck Overview Chart (using data from Paycheck Details) ---
+        # Re-create df_chart_data from df_paycheck_details, ensuring Pay Date is used for sorting
+        df_chart_data_pre_pivot = pd.DataFrame(paycheck_details_data) # Use the original data with datetime.date objects
+        
+        # Explicitly convert 'Pay Date' to datetime objects to ensure .dt accessor works
+        df_chart_data_pre_pivot['Pay Date'] = pd.to_datetime(df_chart_data_pre_pivot['Pay Date'])
+        
+        df_chart_data = df_chart_data_pre_pivot.pivot_table(
             index='Pay Date',
             columns='Bill Name',
             values='Amount Assigned',
             aggfunc='sum'
-        ).fillna(0) # Fill NaN for bills not present in a given paycheck
+        ).fillna(0)
+        
+        # Now convert the index (Pay Date) to string format for display in the Excel sheet
+        df_chart_data.index = df_chart_data.index.strftime('%m-%d-%Y')
 
-        # Sort columns to ensure 'Remaining Balance' is typically last for better stacked chart visual
-        # Get all bill names except 'Remaining Balance'
         bill_columns = [col for col in df_chart_data.columns if col != 'Remaining Balance']
-        # Reorder columns: bill names first, then 'Remaining Balance'
         ordered_columns = bill_columns + ['Remaining Balance']
         df_chart_data = df_chart_data[ordered_columns]
 
+        df_chart_data.to_excel(writer, sheet_name='Chart Data', index=True)
 
-        # Write the pivoted data to a new sheet for the chart
-        # This sheet can be hidden or used as the source for the chart tab
-        df_chart_data.to_excel(writer, sheet_name='Chart Data', index=True) # index=True to keep 'Pay Date' as a column
-
-        # Get the worksheet object for the Chart Data sheet
         worksheet_chart_data = writer.sheets['Chart Data']
 
-        # Create a new chart object.
-        chart = workbook.add_chart({'type': 'column'})
+        chart = workbook.add_chart({'type': 'column', 'subtype': 'stacked'})
 
-        # Configure the chart series.
-        # Data is in 'Chart Data' sheet. Headers are in row 1, data starts from row 2.
-        num_paychecks = len(df_chart_data)
-        num_bill_types = len(df_chart_data.columns) # Number of columns in df_chart_data
-
-        # Category axis (Pay Dates)
+        num_paychecks_in_chart_data = len(df_chart_data)
+        
         chart.set_x_axis({'name': 'Paycheck Date'})
         chart.set_y_axis({'name': 'Amount ($)', 'num_format': '$#,##0'})
 
-        # Add series for each bill name and Remaining Balance
-        # Loop through columns of df_chart_data (starting from the second column as the first is 'Pay Date')
         for i, col_name in enumerate(df_chart_data.columns):
             chart.add_series({
-                'name':       ['Chart Data', 0, i + 1], # Sheet name, row 0 (header), column index + 1 (A=0, B=1, C=2...)
-                'categories': ['Chart Data', 1, 0, num_paychecks, 0], # Sheet name, first data row (1), col 0 (Pay Date), last data row, col 0
-                'values':     ['Chart Data', 1, i + 1, num_paychecks, i + 1], # Sheet name, first data row (1), col index + 1, last data row, col index + 1
-                'data_labels': {'value': True, 'num_format': '$#,##0'}, # Add data labels for clarity
+                'name':       ['Chart Data', 0, i + 1],
+                'categories': ['Chart Data', 1, 0, num_paychecks_in_chart_data, 0],
+                'values':     ['Chart Data', 1, i + 1, num_paychecks_in_chart_data, i + 1],
+                'data_labels': {'value': True, 'num_format': '$#,##0'},
             })
 
-        # Set chart title
         chart.set_title({'name': 'Paycheck Expense Breakdown'})
         
-        # Set the chart to be a stacked column chart
-        chart.set_plotarea({'area': {'fill': {'none': True}}}) # Remove plot area background
-        chart.set_chartarea({'border': {'none': True}}) # Remove chart area border
+        chart.set_plotarea({'area': {'fill': {'none': True}}})
+        chart.set_chartarea({'border': {'none': True}})
         
-        # Hide the legend for now if too many items, or put it at bottom
         chart.set_legend({'position': 'bottom'})
 
-
-        # Insert the chart into a new sheet called 'Paycheck Chart'
         chart_sheet = workbook.add_worksheet('Paycheck Chart')
-        chart_sheet.insert_chart('A1', chart) # Insert the chart at cell A1
-
+        chart_sheet.insert_chart('A1', chart)
 
     print(f"\nSpreadsheet generated successfully at: {output_file}")
 
@@ -855,9 +1194,10 @@ def main_menu():
     while True:
         print("\n--- MonteBuster Main Menu ---")
         print("1. Add a new bill")
-        print("2. View/Edit bills") # Updated menu option
+        print("2. View/Edit bills")
         print("3. Run Financial Plan Simulation")
-        print("4. Exit")
+        print("4. Optimize Debt Payments") # New option!
+        print("5. Exit") # Adjusted exit number
 
         choice = get_user_input("Enter your choice: ").strip()
 
@@ -889,7 +1229,6 @@ def main_menu():
                 continue
 
             print("\n--- Financial Plan Simulation Setup ---")
-            # Corrected example for bi-weekly paychecks in a year
             num_paychecks_str = get_user_input("Enter number of paychecks to simulate (e.g., 26 for a year, if bi-weekly): ").strip()
             try:
                 num_paychecks = int(num_paychecks_str)
@@ -910,30 +1249,25 @@ def main_menu():
                 print("Invalid input. Please enter a numerical value.")
                 continue
 
-            start_date_input = get_user_date_input("Enter the date of your first paycheck (YYYY-MM-DD): ")
+            start_date_input = get_user_date_input("Enter the date of your first paycheck (YYYY-MM-DD or MM-DD-YYYY): ") # Updated prompt here
 
-            # Generate bill instances for the simulation period
-            # Need to define an end_date for generate_bill_instances
-            # Let's make it cover the period of the paychecks plus a buffer
             simulation_end_date = start_date_input + timedelta(weeks=2 * num_paychecks) + timedelta(days=31)
             bill_instances = generate_bill_instances(bills, start_date_input, simulation_end_date)
             
-            # Filter debt templates to pass to simulate_debt_progress
             debt_templates = [b for b in bills if b.get('is_debt', False)]
 
-            # Assign bills to paychecks
             final_pay_periods = assign_bills_to_paychecks(bill_instances, num_paychecks, net_pay, start_date_input)
             
-            # Display summary
             display_paycheck_summary(final_pay_periods)
 
-            # Simulate debt progress
             debt_progress_report = simulate_debt_progress(debt_templates, final_pay_periods)
 
-            # Generate spreadsheet
             generate_spreadsheet_output(final_pay_periods, debt_progress_report)
+        
+        elif choice == '4': # New option for debt optimization
+            optimize_debt_payment(bills)
 
-        elif choice == '4':
+        elif choice == '5': # Changed exit number
             print("Exiting MonteBuster. Goodbye!")
             break
         else:
