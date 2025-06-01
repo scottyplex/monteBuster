@@ -1,567 +1,943 @@
-# src/main.py
 import datetime
+from datetime import datetime, date, timedelta
+import uuid
+import re
+import os
 import json
-import csv # Add this import at the top of your file
-# --- Data Structures ---
+import pandas as pd # For spreadsheet generation
 
-# Pay Period Data Structure:
-# Each pay period will be a dictionary with the following keys:
-# {
-#     'pay_date': datetime.date,  # The actual date the paycheck is received
-#     'net_pay': float,           # The net amount of the paycheck
-#     'initial_balance': float,   # The starting balance for this period (useful if carrying over a buffer)
-#     'assigned_bills': [],       # A list to hold dictionaries of bills assigned to this paycheck
-#     'remaining_balance': float  # The balance after all assigned bills are paid
-# }
+# --- Helper Functions ---
 
-# Bill Data Structure:
-# Each bill will be a dictionary with the following keys:
-# {
-#     'id': str,                  # Unique ID for each bill instance (e.g., 'Rent-2025-06')
-#     'name': str,                # Name of the bill (e.g., 'Rent', 'Electricity')
-#     'due_date': datetime.date,  # The date the bill is due (for this specific instance)
-#     'amount': float,            # The amount of the bill
-#     'category': str,            # Category (e.g., 'Housing', 'Utilities', 'Food')
-#     'is_recurring': bool,       # True if this is a recurring bill
-#     'recurrence_frequency': str or None, # 'monthly', 'bi-weekly', etc. (for the template bill)
-#     'paid_by_paycheck_date': datetime.date or None # To link it back to the paycheck that covers it
-# }
-
-# --- Core Functions ---
-
-def get_user_pay_info():
-
+def get_user_input(prompt):
     """
-    Prompts the user for their last pay date, pay frequency, and net pay.
-    Returns a dictionary with this information.
+    Standardizes getting string input from the user.
+    """
+    return input(prompt)
+
+def get_user_date_input(prompt):
+    """
+    Helper function to get valid date input from user, loops until valid.
     """
     while True:
-        last_pay_date_str = input("Enter your last pay date (YYYY-MM-DD): ")
+        date_str = input(prompt).strip()
         try:
-            # Convert string to a datetime.date object
-            last_pay_date = datetime.datetime.strptime(last_pay_date_str, "%Y-%m-%d").date()
-            break
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            print("Invalid date format. Please use YYYY-MM-DD.")
+            print("Invalid date format. Please use ISO-MM-DD.")
 
+def get_user_float_input(prompt, allow_negative=False):
+    """
+    Helper function to get valid float input from user, loops until valid.
+    """
     while True:
-        pay_frequency = input("Enter your pay frequency (bi-weekly or semi-monthly): ").lower().strip()
-        if pay_frequency in ["bi-weekly", "semi-monthly"]:
-            break
-        else:
-            print("Invalid pay frequency. Please enter 'bi-weekly' or 'semi-monthly'.")
-
-    while True:
-        net_pay_str = input("Enter your net pay amount (e.g., 1500.00): $")
+        value_str = input(prompt).strip().replace('$', '')
         try:
-            net_pay = float(net_pay_str)
-            if net_pay <= 0:
-                print("Net pay must be a positive number.")
+            value = float(value_str)
+            if not allow_negative and value < 0:
+                print("Value cannot be negative. Please enter a positive numerical value.")
             else:
-                break
+                return value
         except ValueError:
-            print("Invalid amount. Please enter a number.")
+            print("Invalid input. Please enter a numerical value.")
 
-    return {
-        "last_pay_date": last_pay_date,
-        "pay_frequency": pay_frequency,
-        "net_pay": net_pay
-    }
-
-def generate_pay_periods(pay_info):
+def get_user_int_input(prompt, min_val=None, max_val=None):
     """
-    Generates a list of pay periods based on user's pay information.
-    Each pay period includes pay_date, net_pay, and initial/remaining balances.
+    Helper function to get valid integer input from user, loops until valid.
     """
-    pay_periods = []
-    last_pay_date = pay_info["last_pay_date"]
-    net_pay = pay_info["net_pay"]
-    pay_frequency = pay_info["pay_frequency"]
-
-    # Calculate pay periods until the end of December 2025
-    end_date = datetime.date(2025, 12, 31)
-
-    current_pay_date = last_pay_date
-
-    # Generate the first paycheck if it's after the last pay date and within range
-    # Or if the last pay date was actually current/future in relation to now
-    if current_pay_date > datetime.date.today() or \
-       (current_pay_date <= datetime.date.today() and last_pay_date == current_pay_date):
-        if current_pay_date <= end_date:
-            pay_periods.append({
-                'pay_date': current_pay_date,
-                'net_pay': net_pay,
-                'initial_balance': net_pay,
-                'assigned_bills': [],
-                'remaining_balance': net_pay
-            })
-
-    # Generate subsequent paychecks
-    while current_pay_date <= end_date:
-        if pay_frequency == "bi-weekly":
-            current_pay_date += datetime.timedelta(days=14)
-        elif pay_frequency == "semi-monthly":
-            # Semi-monthly logic: handles 15th and end of month
-            if current_pay_date.day < 15:
-                current_pay_date = current_pay_date.replace(day=15)
-            elif current_pay_date.day < 28: # Assumes it's the 15th now, next is end of month
-                # Go to end of current month
-                next_month = current_pay_date.month + 1
-                next_year = current_pay_date.year
-                if next_month > 12:
-                    next_month = 1
-                    next_year += 1
-                current_pay_date = datetime.date(next_year, next_month, 1) - datetime.timedelta(days=1)
-            else: # Assumes it's end of month now, next is 15th of next month
-                # Go to 15th of next month
-                next_month = current_pay_date.month + 1
-                next_year = current_pay_date.year
-                if next_month > 12:
-                    next_month = 1
-                    next_year += 1
-                current_pay_date = datetime.date(next_year, next_month, 15)
-
-        if current_pay_date <= end_date:
-            pay_periods.append({
-                'pay_date': current_pay_date,
-                'net_pay': net_pay,
-                'initial_balance': net_pay,
-                'assigned_bills': [],
-                'remaining_balance': net_pay
-            })
-
-    return pay_periods
-
-def get_user_bills():
-    """
-    Allows the user to repeatedly add bills until they indicate they are done.
-    Returns a list of bill dictionaries.
-    """
-    bills = []
     while True:
-        choice = input("\nDo you want to add a bill? (yes/no): ").lower().strip()
-        if choice == "yes":
-            bill = add_bill()
-            bills.append(bill)
-        elif choice == "no":
-            break
-        else:
-            print("Invalid choice. Please enter 'yes' or 'no'.")
-    return bills
+        value_str = input(prompt).strip()
+        try:
+            value = int(value_str)
+            if min_val is not None and value < min_val:
+                print(f"Value must be at least {min_val}.")
+            elif max_val is not None and value > max_val:
+                print(f"Value must be at most {max_val}.")
+            else:
+                return value
+        except ValueError:
+            print("Invalid input. Please enter an integer.")
+
+
+def load_bills(file_path='data/bills.json'):
+    """
+    Loads bill templates from a JSON file.
+    """
+    if not os.path.exists(file_path):
+        return []
+    with open(file_path, 'r') as f:
+        bills_data = json.load(f)
+    
+    # Convert date strings back to datetime.date objects and ensure floats
+    for bill in bills_data:
+        if 'due_date' in bill and isinstance(bill['due_date'], str):
+            bill['due_date'] = datetime.strptime(bill['due_date'], "%Y-%m-%d").date()
+        
+        # Ensure all numeric fields are floats upon loading and handle potential None values
+        for key in ['amount', 'initial_balance', 'minimum_payment', 'interest_rate', 'credit_limit', 'monthly_fee', 'annual_fee']:
+            if key in bill and bill[key] is not None:
+                try:
+                    bill[key] = float(bill[key])
+                except ValueError:
+                    print(f"Warning: Could not convert {bill[key]} for {key} in bill {bill.get('name', 'Unknown')}. Setting to 0.0")
+                    bill[key] = 0.0 # Default to 0.0 if conversion fails
+        if 'annual_fee_month' in bill and bill['annual_fee_month'] is not None:
+            try:
+                bill['annual_fee_month'] = int(bill['annual_fee_month'])
+            except ValueError:
+                print(f"Warning: Could not convert {bill['annual_fee_month']} for annual_fee_month in bill {bill.get('name', 'Unknown')}. Setting to None")
+                bill['annual_fee_month'] = None # Default to None if conversion fails
+
+
+    return bills_data
+
+def save_bills(bills, file_path='data/bills.json'):
+    """
+    Saves bill templates to a JSON file.
+    """
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    
+    # Convert datetime.date objects to string for JSON serialization
+    bills_to_save = []
+    for bill in bills:
+        bill_copy = bill.copy()
+        if 'due_date' in bill_copy and isinstance(bill_copy['due_date'], date):
+            bill_copy['due_date'] = bill_copy['due_date'].strftime("%Y-%m-%d")
+        bills_to_save.append(bill_copy)
+
+    with open(file_path, 'w') as f:
+        json.dump(bills_to_save, f, indent=4)
+
+# --- Main Functions ---
 
 def add_bill():
     """
-    Prompts the user for details of a single bill, including recurrence info.
-    Returns a dictionary representing the bill.
+    Prompts the user to add a new bill (template).
     """
-    name = input("Enter bill name (e.g., Rent, Electricity): ").strip()
-    while not name:
-        print("Bill name cannot be empty.")
-        name = input("Enter bill name: ").strip()
+    bill = {}
+
+    bill['id'] = str(uuid.uuid4()) # Generate a unique ID for the template bill
+
+    bill['name'] = get_user_input("Enter bill name (e.g., Rent, Phone, Credit Card): ").strip()
+
+    # Determine if it's a debt account based on keywords or user input
+    debt_keywords = ["credit card", "loan", "debt", "mortgage", "car loan", "student loan"]
+    
+    is_debt_default = "no"
+    if any(keyword in bill['name'].lower() for keyword in debt_keywords):
+        is_debt_default = "yes"
 
     while True:
-        due_date_str = input(f"Enter due date for {name} (YYYY-MM-DD): ")
-        try:
-            due_date = datetime.datetime.strptime(due_date_str, "%Y-%m-%d").date()
-            break
-        except ValueError:
-            print("Invalid date format. Please use YYYY-MM-DD.")
-
-    while True:
-        amount_str = input(f"Enter amount for {name} (e.g., 500.00): $")
-        try:
-            amount = float(amount_str)
-            if amount <= 0:
-                print("Amount must be a positive number.")
+        is_debt_choice = input(f"Is '{bill['name']}' a debt account (e.g., credit card, loan)? ({is_debt_default}/no): ").lower().strip()
+        if is_debt_choice == "yes" or (is_debt_choice == "" and is_debt_default == "yes"):
+            bill['is_debt'] = True
+            
+            # --- Debt-specific fields ---
+            bill['initial_balance'] = get_user_float_input(f"Enter initial balance for {bill['name']}: $")
+            bill['minimum_payment'] = get_user_float_input(f"Enter minimum payment for {bill['name']}: $")
+            bill['interest_rate'] = get_user_float_input(f"Enter annual interest rate for {bill['name']} (e.g., 0.18 for 18%): ", allow_negative=False)
+            bill['credit_limit'] = get_user_float_input(f"Enter credit limit for {bill['name']} (e.g., 2000.00, or 0 if not applicable): $")
+            bill['monthly_fee'] = get_user_float_input(f"Enter monthly fee for {bill['name']} (e.g., 10.00, enter 0 if none): $")
+            bill['annual_fee'] = get_user_float_input(f"Enter annual fee for {bill['name']} (e.g., 99.00, enter 0 if none): $")
+            
+            # If there's an annual fee, ask for the month it's charged
+            if bill['annual_fee'] > 0:
+                bill['annual_fee_month'] = get_user_int_input(f"Enter the month (1-12) when the annual fee is charged for {bill['name']}: ", 1, 12)
             else:
-                break
-        except ValueError:
-            print("Invalid amount. Please enter a number.")
+                bill['annual_fee_month'] = None # No annual fee, so no annual fee month
 
-    category = input(f"Enter category for {name} (e.g., Housing, Utilities): ").strip()
-    if not category:
-        category = "Uncategorized"
+            break # Exit the is_debt_choice loop
+        
+        elif is_debt_choice == "no" or (is_debt_choice == "" and is_debt_default == "no"):
+            bill['is_debt'] = False
+            # Set debt-specific fields to None if not a debt
+            bill['initial_balance'] = None
+            bill['current_balance'] = None 
+            bill['minimum_payment'] = None
+            bill['interest_rate'] = None
+            bill['credit_limit'] = None
+            bill['monthly_fee'] = None
+            bill['annual_fee'] = None
+            bill['annual_fee_month'] = None
+            break # Exit the is_debt_choice loop
+        else:
+            print("Invalid choice. Please enter 'yes' or 'no'.")
+            
+    # --- General Bill Fields (applicable to all bills) ---
+    bill['due_date'] = get_user_date_input("Enter bill due date (YYYY-MM-DD) for initial setup: ")
 
-    is_recurring = False
-    recurrence_frequency = None
-
+    bill['amount'] = get_user_float_input(f"Enter default amount for {bill['name']} (for non-debt bills, this is the bill amount; for debts, this is typically your planned payment): $")
+    
     while True:
-        recurring_choice = input(f"Is {name} a recurring bill? (yes/no): ").lower().strip()
-        if recurring_choice == "yes":
-            is_recurring = True
-            while True:
-                freq = input("Enter recurrence frequency (monthly, bi-weekly): ").lower().strip()
-                if freq in ["monthly", "bi-weekly"]: # We'll start with these two for now
-                    recurrence_frequency = freq
-                    break
-                else:
-                    print("Invalid frequency. Please enter 'monthly' or 'bi-weekly'.")
+        is_recurring_str = input(f"Is {bill['name']} a recurring bill? (yes/no): ").lower().strip()
+        if is_recurring_str == 'yes':
+            bill['is_recurring'] = True
+            bill['recurrence_frequency'] = get_user_input("Enter recurrence frequency (e.g., monthly, bi-weekly, annually): ").strip().lower()
             break
-        elif recurring_choice == "no":
-            is_recurring = False
+        elif is_recurring_str == 'no':
+            bill['is_recurring'] = False
+            bill['recurrence_frequency'] = None
             break
         else:
             print("Invalid choice. Please enter 'yes' or 'no'.")
 
-    return {
-        'id': f"{name}-{due_date.strftime('%Y%m%d')}", # Initial ID based on name and original due date
-        'name': name,
-        'due_date': due_date,
-        'amount': amount,
-        'category': category,
-        'is_recurring': is_recurring,
-        'recurrence_frequency': recurrence_frequency,
-        'paid_by_paycheck_date': None
-    }
-
-def save_bills(bills, filename="data/bills.json"):
-    """
-    Saves a list of bill dictionaries to a JSON file.
-    Converts datetime.date objects to strings for JSON serialization.
-    """
-    serializable_bills = []
-    for bill in bills:
-        temp_bill = bill.copy()
-        if isinstance(temp_bill['due_date'], datetime.date):
-            temp_bill['due_date'] = temp_bill['due_date'].strftime("%Y-%m-%d")
-        # paid_by_paycheck_date might be None or a date object
-        if temp_bill.get('paid_by_paycheck_date') and isinstance(temp_bill['paid_by_paycheck_date'], datetime.date):
-            temp_bill['paid_by_paycheck_date'] = temp_bill['paid_by_paycheck_date'].strftime("%Y-%m-%d")
-        serializable_bills.append(temp_bill)
-
-    try:
-        with open(filename, 'w') as f:
-            json.dump(serializable_bills, f, indent=4)
-        print(f"Bills saved to {filename}")
-    except IOError as e:
-        print(f"Error saving bills to {filename}: {e}")
-
-def load_bills(filename="data/bills.json"):
-    """
-    Loads a list of bill dictionaries from a JSON file.
-    Converts date strings back to datetime.date objects.
-    """
-    bills = []
-    try:
-        with open(filename, 'r') as f:
-            loaded_bills = json.load(f)
-        for bill_data in loaded_bills:
-            # Convert date strings back to datetime.date objects
-            if 'due_date' in bill_data and isinstance(bill_data['due_date'], str):
-                bill_data['due_date'] = datetime.datetime.strptime(bill_data['due_date'], "%Y-%m-%d").date()
-            if 'paid_by_paycheck_date' in bill_data and isinstance(bill_data['paid_by_paycheck_date'], str):
-                bill_data['paid_by_paycheck_date'] = datetime.datetime.strptime(bill_data['paid_by_paycheck_date'], "%Y-%m-%d").date()
-            elif 'paid_by_paycheck_date' in bill_data and bill_data['paid_by_paycheck_date'] == "null": # Handle case if json saves None as "null" string
-                bill_data['paid_by_paycheck_date'] = None
-            # Ensure new fields exist even if loading old data without them
-            bill_data.setdefault('id', f"{bill_data['name']}-{bill_data['due_date'].strftime('%Y%m%d')}" if isinstance(bill_data['due_date'], datetime.date) else bill_data['name'])
-            bill_data.setdefault('is_recurring', False)
-            bill_data.setdefault('recurrence_frequency', None)
-
-            bills.append(bill_data)
-        print(f"Bills loaded from {filename}")
-    except FileNotFoundError:
-        print(f"No existing bill file found at {filename}. Starting with no bills.")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from {filename}: {e}. Starting with no bills.")
-    except Exception as e:
-        print(f"An unexpected error occurred while loading bills: {e}. Starting with no bills.")
-    return bills
-
-# src/main.py (continued)
-
-# ... (Your existing functions up to load_bills) ...
-
-def generate_future_bill_instances(template_bills, end_date_horizon=datetime.date(2025, 12, 31)):
-    """
-    Generates all future instances of recurring bills until a specified end date.
-    Returns a new list containing all one-time bills and generated recurring bill instances.
-    """
-    all_bill_instances = []
+    bill['category'] = get_user_input(f"Enter category for {bill['name']} (e.g., Housing, Utilities, Transportation, Debt, Subscription): ").strip()
     
-    for bill in template_bills:
-        if not bill['is_recurring']:
-            # Add one-time bills directly
-            all_bill_instances.append(bill)
-            continue # Move to the next bill
+    # Initialize these for new bills
+    bill['paid_by_paycheck_date'] = None # This will be filled later by assignment logic
 
-        # Handle recurring bills
-        current_due_date = bill['due_date']
-        
-        # Determine the start point for generating instances
-        # We need to consider bills that are due today or in the future
-        # or recurring bills that might have had their first instance due slightly before today
-        # but the *next* instance is still relevant.
-        # For simplicity, let's generate from the *initial* due date onward if it's within the horizon,
-        # otherwise from the next relevant due date.
-        
-        # If the first instance is already past, skip it for future generation,
-        # but ensure the initial bill (from template_bills) is not duplicated if it was recent/future.
-        
-        # Ensure we don't add the template bill itself if it's past and not the first instance for this run
-        # The key here is to generate *new* instances for future payments.
-        
-        # If the template bill's due_date is in the past,
-        # we need to find the *first upcoming* due date for its recurrence.
-        if current_due_date < datetime.date.today():
-            if bill['recurrence_frequency'] == 'monthly':
-                # Advance month by month until it's today or in the future
-                while current_due_date < datetime.date.today():
-                    # Handle end-of-month dates for monthly recurrence
-                    # E.g., if due on Jan 31, next is Feb 28/29, then Mar 31
-                    try:
-                        current_due_date = current_due_date.replace(month=current_due_date.month + 1)
-                    except ValueError: # Handle month overflow (Dec -> Jan)
-                        current_due_date = current_due_date.replace(year=current_due_date.year + 1, month=1)
-            elif bill['recurrence_frequency'] == 'bi-weekly':
-                # Advance two weeks at a time until it's today or in the future
-                while current_due_date < datetime.date.today():
-                    current_due_date += datetime.timedelta(days=14)
+    return bill
 
-
-        # Now, generate instances from the current_due_date onwards
-        while current_due_date <= end_date_horizon:
-            # Create a new bill instance (copy the original, but update date and ID)
-            new_bill_instance = bill.copy()
-            new_bill_instance['due_date'] = current_due_date
-            # Create a unique ID for each instance (e.g., Rent-2025-06-01)
-            new_bill_instance['id'] = f"{bill['name']}-{current_due_date.strftime('%Y%m%d')}"
-            new_bill_instance['paid_by_paycheck_date'] = None # Reset for new instance
-
-            all_bill_instances.append(new_bill_instance)
-
-            # Move to the next due date based on frequency
-            if bill['recurrence_frequency'] == 'monthly':
-                # Handle end-of-month dates (e.g., Jan 31 -> Feb 28 -> Mar 31)
-                try:
-                    current_due_date = current_due_date.replace(month=current_due_date.month + 1)
-                except ValueError: # Month overflow (Dec -> Jan)
-                    current_due_date = current_due_date.replace(year=current_due_date.year + 1, month=1)
-            elif bill['recurrence_frequency'] == 'bi-weekly':
-                current_due_date += datetime.timedelta(days=14)
-            # Add other frequencies here if needed (e.g., 'weekly', 'quarterly')
-
-    # Sort all instances by due date
-    all_bill_instances.sort(key=lambda b: b['due_date'])
-    return all_bill_instances
-
-def assign_bills_to_paychecks(pay_periods, bills):
+def view_bills(bills):
     """
-    Assigns bills to the earliest possible paycheck based on their due date,
-    considering a grace period for bills due shortly after a paycheck.
-    Prioritizes earlier due dates.
+    Displays all loaded bill templates in a formatted list.
     """
-    # Bills are already sorted by due date from generate_future_bill_instances
+    if not bills:
+        print("\nNo bills currently loaded. Please add some bills first.")
+        return False # Indicate no bills to view
 
-    # Make a copy of pay_periods to work with, as we'll modify remaining_balance
-    # and assigned_bills for each period
-    assigned_pay_periods = [p.copy() for p in pay_periods]
-    for pp in assigned_pay_periods:
-        pp['assigned_bills'] = [] # Ensure this is a new empty list for each copy
-        pp['remaining_balance'] = pp['net_pay'] # Reset for fresh assignment
+    print("\n--- Current Bill Templates ---")
+    for i, bill in enumerate(bills):
+        print(f"{i + 1}. Name: {bill['name']}")
+        print(f"   Due Date: {bill['due_date'].strftime('%Y-%m-%d')}")
+        print(f"   Amount: ${bill['amount']:.2f}")
+        print(f"   Recurring: {'Yes' if bill['is_recurring'] else 'No'}")
+        if bill['is_recurring']:
+            print(f"   Frequency: {bill['recurrence_frequency']}")
+        print(f"   Category: {bill['category']}")
+        if bill.get('is_debt', False):
+            print(f"   -- Debt Details --")
+            print(f"   Initial Balance: ${bill['initial_balance']:.2f}")
+            print(f"   Min Payment: ${bill['minimum_payment']:.2f}")
+            print(f"   Interest Rate: {bill['interest_rate'] * 100:.2f}% (Annual)")
+            print(f"   Credit Limit: ${bill['credit_limit']:.2f}")
+            if bill.get('monthly_fee', 0.0) > 0:
+                print(f"   Monthly Fee: ${bill['monthly_fee']:.2f}")
+            if bill.get('annual_fee', 0.0) > 0:
+                print(f"   Annual Fee: ${bill['annual_fee']:.2f} (Month: {bill['annual_fee_month']})")
+        print("-" * 20)
+    return True # Indicate bills were displayed
 
-    unassigned_bills = []
+def edit_bill(bills):
+    """
+    Allows the user to select and edit an existing bill template.
+    """
+    if not view_bills(bills):
+        return # No bills to edit
 
-    # Define a window for assigning bills
-    # A bill due within GRACE_DAYS_AFTER_PAYCHECK days *after* a paycheck date
-    # can be covered by that preceding paycheck.
-    # This addresses bills due early next month (e.g., 1st) being paid by a
-    # paycheck at the end of the current month.
-    GRACE_DAYS_AFTER_PAYCHECK = 5 # Example: A bill due up to 7 days after a paycheck can be covered by it
+    while True:
+        try:
+            bill_index_str = get_user_input("Enter the number of the bill to edit (or 0 to cancel): ").strip()
+            bill_index = int(bill_index_str) - 1
 
-    for bill in bills:
-        assigned = False
-        for pay_period in assigned_pay_periods:
-            # Condition 1: Paycheck is on or after the bill's due date (standard assignment)
-            condition1 = (pay_period['pay_date'] >= bill['due_date'])
+            if bill_index == -1: # User entered 0 to cancel
+                print("Bill editing cancelled.")
+                return
 
-            # Condition 2: Paycheck is *before* the bill's due date, BUT
-            # the bill's due date falls within a "grace period" (e.g., 7 days)
-            # *after* this paycheck's date.
-            # This is crucial for bills like Rent (due 1st) paid by end-of-month paycheck.
-            condition2 = (pay_period['pay_date'] < bill['due_date'] and
-                          bill['due_date'] <= (pay_period['pay_date'] + datetime.timedelta(days=GRACE_DAYS_AFTER_PAYCHECK)))
-
-            # Check if bill can be assigned to this pay period based on date window and sufficient funds
-            if (condition1 or condition2) and \
-               pay_period['remaining_balance'] >= bill['amount']:
+            if 0 <= bill_index < len(bills):
+                selected_bill = bills[bill_index]
+                print(f"\n--- Editing Bill: {selected_bill['name']} ---")
                 
-                # Assign the bill to this pay period
-                pay_period['assigned_bills'].append(bill)
-                pay_period['remaining_balance'] -= bill['amount']
-                bill['paid_by_paycheck_date'] = pay_period['pay_date'] # Link bill to its paying paycheck
-                assigned = True
-                break # Move to the next bill once this one is assigned
-        
-        if not assigned:
-            unassigned_bills.append(bill)
+                # Display editable fields
+                print("Select field to edit:")
+                print("1. Name")
+                print("2. Due Date (YYYY-MM-DD)")
+                print("3. Amount")
+                print("4. Recurring (yes/no)")
+                if selected_bill['is_recurring']:
+                    print("5. Recurrence Frequency")
+                print("6. Category")
+                if selected_bill.get('is_debt', False):
+                    print("7. Initial Balance")
+                    print("8. Minimum Payment")
+                    print("9. Interest Rate")
+                    print("10. Credit Limit")
+                    print("11. Monthly Fee")
+                    print("12. Annual Fee")
+                    if selected_bill.get('annual_fee', 0.0) > 0:
+                        print("13. Annual Fee Month")
+                print("0. Done editing this bill")
 
-    return assigned_pay_periods, unassigned_bills
+                while True:
+                    field_choice = get_user_input("Enter field number to edit: ").strip()
 
-def display_paycheck_summary(pay_periods, unassigned_bills):
+                    if field_choice == '0':
+                        print(f"Finished editing '{selected_bill['name']}'.")
+                        save_bills(bills) # Save after each bill is done editing
+                        return # Exit editing for this bill
+
+                    if field_choice == '1':
+                        selected_bill['name'] = get_user_input(f"Enter new name for {selected_bill['name']}: ").strip()
+                    elif field_choice == '2':
+                        selected_bill['due_date'] = get_user_date_input(f"Enter new due date for {selected_bill['name']} (YYYY-MM-DD): ")
+                    elif field_choice == '3':
+                        selected_bill['amount'] = get_user_float_input(f"Enter new amount for {selected_bill['name']}: $")
+                    elif field_choice == '4':
+                        while True:
+                            is_recurring_str = input(f"Is {selected_bill['name']} a recurring bill? (yes/no): ").lower().strip()
+                            if is_recurring_str == 'yes':
+                                selected_bill['is_recurring'] = True
+                                selected_bill['recurrence_frequency'] = get_user_input("Enter new recurrence frequency (e.g., monthly, bi-weekly, annually): ").strip().lower()
+                                break
+                            elif is_recurring_str == 'no':
+                                selected_bill['is_recurring'] = False
+                                selected_bill['recurrence_frequency'] = None
+                                break
+                            else:
+                                print("Invalid choice. Please enter 'yes' or 'no'.")
+                    elif field_choice == '5' and selected_bill['is_recurring']:
+                        selected_bill['recurrence_frequency'] = get_user_input("Enter new recurrence frequency (e.g., monthly, bi-weekly, annually): ").strip().lower()
+                    elif field_choice == '6':
+                        selected_bill['category'] = get_user_input(f"Enter new category for {selected_bill['name']}: ").strip()
+                    elif selected_bill.get('is_debt', False) and field_choice == '7':
+                        selected_bill['initial_balance'] = get_user_float_input(f"Enter new initial balance for {selected_bill['name']}: $")
+                    elif selected_bill.get('is_debt', False) and field_choice == '8':
+                        selected_bill['minimum_payment'] = get_user_float_input(f"Enter new minimum payment for {selected_bill['name']}: $")
+                    elif selected_bill.get('is_debt', False) and field_choice == '9':
+                        selected_bill['interest_rate'] = get_user_float_input(f"Enter new annual interest rate for {selected_bill['name']} (e.g., 0.18 for 18%): ", allow_negative=False)
+                    elif selected_bill.get('is_debt', False) and field_choice == '10':
+                        selected_bill['credit_limit'] = get_user_float_input(f"Enter new credit limit for {selected_bill['name']}: $")
+                    elif selected_bill.get('is_debt', False) and field_choice == '11':
+                        selected_bill['monthly_fee'] = get_user_float_input(f"Enter new monthly fee for {selected_bill['name']} (enter 0 if none): $")
+                    elif selected_bill.get('is_debt', False) and field_choice == '12':
+                        selected_bill['annual_fee'] = get_user_float_input(f"Enter new annual fee for {selected_bill['name']} (enter 0 if none): $")
+                        if selected_bill['annual_fee'] > 0:
+                            selected_bill['annual_fee_month'] = get_user_int_input(f"Enter the month (1-12) when the annual fee is charged for {selected_bill['name']}: ", 1, 12)
+                        else:
+                            selected_bill['annual_fee_month'] = None
+                    elif selected_bill.get('is_debt', False) and selected_bill.get('annual_fee', 0.0) > 0 and field_choice == '13':
+                        selected_bill['annual_fee_month'] = get_user_int_input(f"Enter the month (1-12) when the annual fee is charged for {selected_bill['name']}: ", 1, 12)
+                    else:
+                        print("Invalid field number or field not applicable to this bill type. Please try again.")
+                    
+                    # This line attempts to get a key by index, which is not reliable for dictionaries.
+                    # It's better to just confirm the update generally.
+                    # print(f"'{selected_bill['name']}' updated. Current value: {selected_bill.get(list(selected_bill.keys())[int(field_choice)-1], 'N/A')}") # Basic confirmation
+                    print(f"'{selected_bill['name']}' updated.") # Simpler confirmation
+                    view_bills([selected_bill]) # Show updated bill
+            else:
+                print("Invalid bill number. Please enter a number from the list.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+        except IndexError:
+            print("Invalid bill number. Please enter a number from the list.")
+
+def generate_bill_instances(bill_templates, start_date, end_date):
     """
-    Displays a comprehensive summary of each pay period, including assigned bills
-    and remaining balances, and lists any unassigned bills.
+    Generates instances of recurring bills based on templates within a date range.
     """
-    print("\n" + "="*50)
-    print("           MONTE BUSTER: FINANCIAL OVERVIEW")
-    print("="*50)
-
-    for pp in pay_periods:
-        print(f"\n--- Paycheck Date: {pp['pay_date'].strftime('%Y-%m-%d')} ---")
-        print(f"  Net Pay: ${pp['net_pay']:.2f}")
-        print(f"  Initial Balance for Period: ${pp['net_pay']:.2f}") # Initial from net pay
-
-        if pp['assigned_bills']:
-            print("  Assigned Bills:")
-            for bill in pp['assigned_bills']:
-                print(f"    - {bill['name']:<20} (Due: {bill['due_date'].strftime('%m-%d')}) - ${bill['amount']:.2f}")
-        else:
-            print("  No bills assigned to this paycheck.")
-
-        print(f"  **Remaining Balance: ${pp['remaining_balance']:.2f}**")
-        print("-" * 30) # Separator for each paycheck
-
-    if unassigned_bills:
-        print("\n" + "="*50)
-        print("          UNASSIGNED BILLS (Insufficient Funds/Past Due)")
-        print("="*50)
-        for bill in unassigned_bills:
-            print(f"  - {bill['name']:<20} (Due: {bill['due_date'].strftime('%Y-%m-%d')}) - ${bill['amount']:.2f} (Cannot be covered by future paychecks)")
-    else:
-        print("\nAll bills successfully assigned!")
-
-    print("\n" + "="*50)
-    print("                 END OF OVERVIEW")
-    print("="*50)
-
-def generate_spreadsheet_output(pay_periods, base_filename="data/financial_plan.csv"):
-    """
-    Generates a chronological CSV file containing all financial transactions
-    (paychecks and assigned bills) with a running balance.
-    Attempts to save to base_filename. If permission denied, saves to a timestamped file.
-    """
-    fieldnames = ['Date', 'Type', 'Description', 'Amount', 'Balance_Impact', 'Running_Balance_After_Transaction']
-
-    all_transactions = []
+    bill_instances = []
     
-    # 1. Collect all transactions into a single list
-    for pp in pay_periods:
-        # Add the paycheck transaction
-        all_transactions.append({
-            'Date': pp['pay_date'], # Use datetime.date object for sorting
-            'Type': 'Paycheck',
-            'Description': 'Net Pay Received',
-            'Amount': pp['net_pay'],
-            'Balance_Impact': f"+{pp['net_pay']:.2f}"
-        })
+    # Convert start_date and end_date to date objects if they are strings (shouldn't happen with get_user_date_input)
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-        # Add each assigned bill as a separate transaction
+    for template in bill_templates:
+        # Debts are not "generated instances" in the same way; their payments are part of the simulation
+        # However, if a 'debt payment' is entered as a recurring bill (e.g. 'Credit Card Payment'), it will be processed here
+        # For simplicity, we assume 'amount' for debt templates is the intended payment, and it will be assigned.
+        # The debt simulation itself uses minimum_payment if no assigned payment is found for a month.
+
+        if template['is_recurring']:
+            current_due_date = template['due_date']
+            
+            # Adjust current_due_date to be within or past start_date if it's an old template
+            # Ensure we don't start generating instances from before our planning period
+            while current_due_date < start_date:
+                if template['recurrence_frequency'] == 'monthly':
+                    if current_due_date.month == 12:
+                        current_due_date = current_due_date.replace(year=current_due_date.year + 1, month=1)
+                    else:
+                        current_due_date = current_due_date.replace(month=current_due_date.month + 1)
+                elif template['recurrence_frequency'] == 'bi-weekly':
+                    current_due_date += timedelta(weeks=2)
+                elif template['recurrence_frequency'] == 'annually':
+                    current_due_date = current_due_date.replace(year=current_due_date.year + 1)
+                else:
+                    break # Break if frequency is unknown, avoid infinite loop for bad data
+
+            # Now, iterate from the adjusted current_due_date
+            while current_due_date <= end_date:
+                instance = template.copy()
+                instance['id'] = str(uuid.uuid4()) # Unique ID for each instance
+                instance['due_date'] = current_due_date
+                instance['paid_by_paycheck_date'] = None # Reset for each instance
+                bill_instances.append(instance)
+
+                # Move to the next due date based on frequency
+                if template['recurrence_frequency'] == 'monthly':
+                    if current_due_date.month == 12:
+                        current_due_date = current_due_date.replace(year=current_due_date.year + 1, month=1)
+                    else:
+                        current_due_date = current_due_date.replace(month=current_due_date.month + 1)
+                elif template['recurrence_frequency'] == 'bi-weekly':
+                    current_due_date += timedelta(weeks=2)
+                elif template['recurrence_frequency'] == 'annually':
+                    current_due_date = current_due_date.replace(year=current_due_date.year + 1)
+                else:
+                    print(f"Warning: Unknown recurrence frequency for {template['name']}: {template['recurrence_frequency']}")
+                    break # Stop generating instances for this bill if frequency is unknown
+        else:
+            # For non-recurring bills, just add the single instance if within range
+            if start_date <= template['due_date'] <= end_date:
+                instance = template.copy()
+                instance['id'] = str(uuid.uuid4()) # Unique ID for each instance
+                instance['paid_by_paycheck_date'] = None
+                bill_instances.append(instance)
+    
+    # Sort bill instances by due date
+    bill_instances.sort(key=lambda x: x['due_date'])
+    
+    return bill_instances
+
+def assign_bills_to_paychecks(bill_instances, num_paychecks, net_pay, start_date):
+    """
+    Assigns bills to paychecks over a specified period.
+    Assumes bi-weekly paychecks starting from start_date.
+    """
+    paychecks = []
+    current_pay_date = start_date
+
+    # Determine planning end date based on paychecks
+    # Assuming start_date is the date of the first paycheck.
+    # The simulation period should cover all bills until the last paycheck.
+    end_planning_date = start_date + timedelta(weeks=2 * (num_paychecks - 1)) # Date of the last paycheck
+    
+    # Filter out bill instances that are outside the full planning period
+    # This ensures only relevant bills are considered, even if due dates extend slightly past a paycheck
+    filtered_bill_instances = [
+        bill for bill in bill_instances 
+        if bill['due_date'] <= end_planning_date + timedelta(days=31) # Allow bills due a month after last paycheck
+    ]
+    # Sort by due date
+    filtered_bill_instances.sort(key=lambda x: x['due_date'])
+
+    # Track unassigned bills that carry over
+    unassigned_carry_over_bills = []
+
+    for i in range(num_paychecks):
+        paycheck_info = {
+            'pay_date': current_pay_date,
+            'net_pay': net_pay,
+            'initial_balance_for_period': net_pay,
+            'assigned_bills': [],
+            'remaining_balance': net_pay
+        }
+        
+        # Add any carried-over unassigned bills to the current paycheck's consideration
+        # Process carry-over bills first
+        for bill in unassigned_carry_over_bills[:]: # Iterate over copy
+            if paycheck_info['remaining_balance'] >= bill['amount']:
+                paycheck_info['assigned_bills'].append(bill)
+                paycheck_info['remaining_balance'] -= bill['amount']
+                bill['paid_by_paycheck_date'] = current_pay_date # Mark as paid
+                unassigned_carry_over_bills.remove(bill) # Remove from carry-over list
+            # Else, it remains in unassigned_carry_over_bills for the next paycheck
+        
+        # Identify bills due before the *next* paycheck (or end of planning if last paycheck)
+        next_pay_date = current_pay_date + timedelta(weeks=2)
+        
+        # Bills due between previous paycheck + 1 day and next paycheck due date
+        bills_due_this_period = []
+        for bill in filtered_bill_instances:
+            # If bill is not already paid/assigned AND its due date is relevant for this paycheck window
+            if bill.get('paid_by_paycheck_date') is None and bill['due_date'] <= next_pay_date:
+                bills_due_this_period.append(bill)
+        
+        # Sort new bills for this period by due date, then by amount (largest first)
+        bills_due_this_period.sort(key=lambda x: (x['due_date'], -x['amount']))
+
+        # Assign new bills due this period
+        for bill in bills_due_this_period:
+            if bill.get('paid_by_paycheck_date') is None: # Only assign if not already assigned (prevents double assignment if it was a carry-over)
+                if paycheck_info['remaining_balance'] >= bill['amount']:
+                    paycheck_info['assigned_bills'].append(bill)
+                    paycheck_info['remaining_balance'] -= bill['amount']
+                    bill['paid_by_paycheck_date'] = current_pay_date # Mark as paid
+                else:
+                    unassigned_carry_over_bills.append(bill) # Carry over if insufficient funds
+
+        paychecks.append(paycheck_info)
+        current_pay_date += timedelta(weeks=2)
+
+    return paychecks
+
+def display_paycheck_summary(final_pay_periods):
+    """
+    Displays a summary of assigned bills per paycheck.
+    """
+    print("\n" + "="*50)
+    print(" " * 10 + "MONTE BUSTER: FINANCIAL OVERVIEW")
+    print("="*50 + "\n")
+
+    total_bills_generated = sum(len(pp['assigned_bills']) for pp in final_pay_periods)
+    print(f"Total paychecks planned: {len(final_pay_periods)}")
+    print(f"Generated {total_bills_generated} total bill instances for planning until {final_pay_periods[-1]['pay_date'].strftime('%Y-%m-%d') if final_pay_periods else 'N/A'}.\n")
+
+
+    for pp in final_pay_periods:
+        print(f"--- Paycheck Date: {pp['pay_date'].strftime('%Y-%m-%d')} ---")
+        print(f"  Net Pay: ${pp['net_pay']:.2f}")
+        print(f"  Initial Balance for Period: ${pp['initial_balance_for_period']:.2f}")
+        print("  Assigned Bills:")
+        if not pp['assigned_bills']:
+            print("    None")
         for bill in pp['assigned_bills']:
-            all_transactions.append({
-                'Date': bill['due_date'], # Use bill's due date for its transaction entry
-                'Type': 'Bill Payment',
-                'Description': bill['name'],
-                'Amount': -bill['amount'], # Negative for expense
-                'Balance_Impact': f"-{bill['amount']:.2f}"
+            print(f"    - {bill['name']:<20} (Due: {bill['due_date'].strftime('%m-%d')}) - ${bill['amount']:.2f}")
+        print(f"  **Remaining Balance: ${pp['remaining_balance']:.2f}**")
+        print("-" * 30 + "\n")
+
+def simulate_debt_progress(template_bills, final_pay_periods):
+    """
+    Simulates the progress of debt payments and interest accrual over time.
+    Tracks balance reduction for each debt account.
+    
+    Args:
+        template_bills (list): Original list of template bills, including debt details.
+        final_pay_periods (list): List of pay periods with assigned bills.
+
+    Returns:
+        dict: A dictionary where keys are debt names and values are lists of
+              monthly snapshots of debt balance, interest paid, etc.
+    """
+    
+    # Initialize live debt accounts from templates
+    live_debt_accounts = {}
+    for bill_template in template_bills:
+        if bill_template.get('is_debt', False) and bill_template.get('initial_balance') is not None and bill_template['initial_balance'] > 0:
+            debt_name = bill_template['name']
+            live_debt_accounts[debt_name] = {
+                'name': debt_name,
+                'current_balance': float(bill_template['initial_balance']), 
+                'minimum_payment': float(bill_template['minimum_payment']),
+                'interest_rate': float(bill_template['interest_rate']), # Annual rate (e.g., 0.24)
+                'credit_limit': float(bill_template['credit_limit']),
+                'monthly_fee': float(bill_template.get('monthly_fee', 0.0)),
+                'annual_fee': float(bill_template.get('annual_fee', 0.0)),
+                'annual_fee_month': bill_template.get('annual_fee_month'),
+                'history': [] # To store monthly snapshots of balance, interest, etc.
+            }
+    
+    if not live_debt_accounts:
+        print("\nNo active debt accounts with a balance to simulate.")
+        return {}
+
+    print("\n--- Simulating Debt Progress ---")
+
+    # Group payments by debt and by month for easier processing
+    # Key: (year, month), Value: { debt_name: total_paid_this_month }
+    payments_by_month_and_debt = {} 
+    
+    # Determine the earliest and latest payment month based on assigned bills
+    # If no payments, use today's month as min and 6 months from now as max
+    min_year, min_month = date.today().year, date.today().month
+    max_year, max_month = (date.today() + timedelta(days=180)).year, (date.today() + timedelta(days=180)).month
+
+
+    if final_pay_periods:
+        first_pay_date = final_pay_periods[0]['pay_date']
+        last_pay_date = final_pay_periods[-1]['pay_date']
+        
+        min_year, min_month = first_pay_date.year, first_pay_date.month
+        max_year, max_month = last_pay_date.year, last_pay_date.month
+
+        for pp in final_pay_periods:
+            pay_date = pp['pay_date']
+            payment_month_key = (pay_date.year, pay_date.month)
+            
+            for assigned_bill in pp['assigned_bills']:
+                if assigned_bill.get('is_debt', False) and assigned_bill['name'] in live_debt_accounts:
+                    debt_name = assigned_bill['name']
+                    
+                    payments_by_month_and_debt.setdefault(payment_month_key, {}).setdefault(debt_name, 0.0)
+                    payments_by_month_and_debt[payment_month_key][debt_name] += assigned_bill['amount']
+    
+    
+    # Set the simulation start date (beginning of the month of the first payment or today)
+    start_sim_date = date(min_year, min_month, 1)
+    if start_sim_date < date.today().replace(day=1):
+        start_sim_date = date.today().replace(day=1)
+
+    # Set the simulation end date (end of the month of the last payment, or later to see payoff)
+    end_sim_date_raw = date(max_year, max_month, 1)
+    if end_sim_date_raw.month == 12:
+        end_sim_date = end_sim_date_raw.replace(year=end_sim_date_raw.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        end_sim_date = end_sim_date_raw.replace(month=end_sim_date_raw.month + 1, day=1) - timedelta(days=1)
+    
+    # Extend simulation for a few more months just in case debts take longer to pay off
+    end_sim_date += timedelta(days=365) # Extend by another year for simulation
+
+    current_sim_date = start_sim_date
+
+    # Iterate month by month strictly until the determined end date
+    simulation_months_counter = 0
+    while current_sim_date <= end_sim_date and simulation_months_counter < 120: # Cap at 10 years to prevent infinite loops
+        year = current_sim_date.year
+        month = current_sim_date.month
+
+        print(f"\n--- Month: {year}-{month:02d} ---")
+        
+        # Check if all debts are paid off at the beginning of the month
+        all_debts_paid_this_month = True
+        for debt_name, debt_data in live_debt_accounts.items():
+            if debt_data['current_balance'] > 0:
+                all_debts_paid_this_month = False
+                break
+        if all_debts_paid_this_month:
+            print("All active debts paid off!")
+            break
+
+
+        for debt_name, debt_data in live_debt_accounts.items():
+            current_balance = debt_data['current_balance']
+            
+            if current_balance <= 0:
+                if not debt_data['history'] or debt_data['history'][-1]['date'].month != current_sim_date.month or debt_data['history'][-1]['date'].year != current_sim_date.year:
+                    debt_data['history'].append({
+                        'date': current_sim_date,
+                        'balance_start_of_month': 0.0,
+                        'total_fees_charged': 0.0, 
+                        'payments_made': 0.0,
+                        'interest_accrued': 0.0,
+                        'principal_paid': 0.0,
+                        'balance_end_of_month': 0.0
+                    })
+                # Only print "Paid off!" once per debt
+                if not debt_data['history'] or debt_data['history'][-1]['balance_end_of_month'] > 0:
+                    print(f"  - {debt_name}: Paid off! (Balance: $0.00)")
+                continue
+
+            # --- APPLY MONTHLY AND ANNUAL FEES ---
+            total_fees_this_month = 0.0
+            
+            # Apply monthly fee
+            monthly_fee = debt_data.get('monthly_fee', 0.0)
+            if monthly_fee > 0:
+                total_fees_this_month += monthly_fee
+                # current_balance += monthly_fee # Apply after interest calc, or account for interest on fee if immediate
+                # print(f"  - {debt_name}: Monthly Fee of ${monthly_fee:.2f} charged.") # Removed for cleaner output
+            
+            # Apply annual fee if applicable for this month
+            annual_fee = debt_data.get('annual_fee', 0.0)
+            annual_fee_month = debt_data.get('annual_fee_month')
+            if annual_fee > 0 and annual_fee_month == month:
+                total_fees_this_month += annual_fee
+                # current_balance += annual_fee # Apply after interest calc, or account for interest on fee if immediate
+                # print(f"  - {debt_name}: Annual Fee of ${annual_fee:.2f} charged.") # Removed for cleaner output
+            # --- END FEE LOGIC ---
+
+            annual_interest_rate = debt_data['interest_rate']
+            monthly_interest_rate = annual_interest_rate / 12.0
+
+            # Interest is typically calculated on the balance *before* the current month's payment.
+            # Fees can also accrue interest if added before interest calculation.
+            interest_accrued_this_month = current_balance * monthly_interest_rate
+            current_balance_after_interest_and_fees = current_balance + interest_accrued_this_month + total_fees_this_month
+            
+            payments_this_month = payments_by_month_and_debt.get((year, month), {}).get(debt_name, 0.0)
+            
+            new_balance = current_balance_after_interest_and_fees - payments_this_month
+            
+            if new_balance < 0:
+                new_balance = 0.0
+            
+            # Calculate principal paid: total payments minus interest and fees for this month
+            principal_paid_this_month = payments_this_month - (interest_accrued_this_month + total_fees_this_month)
+            if principal_paid_this_month < 0:
+                principal_paid_this_month = 0.0 
+            
+            debt_data['current_balance'] = new_balance
+
+            # Record snapshot
+            debt_data['history'].append({
+                'date': current_sim_date,
+                'balance_start_of_month': round(current_balance, 2), # Balance before any actions this month
+                'total_fees_charged': round(total_fees_this_month, 2), 
+                'payments_made': round(payments_this_month, 2),
+                'interest_accrued': round(interest_accrued_this_month, 2),
+                'principal_paid': round(principal_paid_this_month, 2),
+                'balance_end_of_month': round(new_balance, 2)
             })
 
-    # 2. Sort all transactions chronologically by their date
-    all_transactions.sort(key=lambda x: x['Date'])
+            fee_print_str = ""
+            if total_fees_this_month > 0:
+                fee_print_str = f" (+Fees: ${total_fees_this_month:.2f})"
 
-    # --- Now, write the sorted transactions to CSV with a running balance ---
-
-    # Helper function to write to CSV, handles the actual file writing logic
-    def write_to_csv(output_filename):
-        with open(output_filename, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-
-            global_running_balance = 0.0 # Initialize a true running balance across all transactions
-
-            for transaction in all_transactions:
-                global_running_balance += transaction['Amount'] # Update running balance
-                
-                writer.writerow({
-                    'Date': transaction['Date'].strftime('%Y-%m-%d'), # Format date for CSV
-                    'Type': transaction['Type'],
-                    'Description': transaction['Description'],
-                    'Amount': transaction['Amount'],
-                    'Balance_Impact': transaction['Balance_Impact'],
-                    'Running_Balance_After_Transaction': f"{global_running_balance:.2f}"
-                })
-        print(f"Financial plan exported to {output_filename}")
-
-    # --- Attempt to write to the base filename, with fallback for permission errors ---
-    try:
-        write_to_csv(base_filename)
-    except IOError as e:
-        if "Permission denied" in str(e):
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            dir_name = os.path.dirname(base_filename)
-            file_name_without_ext = os.path.splitext(os.path.basename(base_filename))[0]
-            ext = os.path.splitext(os.path.basename(base_filename))[1]
-
-            timestamped_filename = os.path.join(dir_name, f"{file_name_without_ext}_{timestamp}{ext}")
-
-            print(f"Permission denied for {base_filename}. Attempting to save to {timestamped_filename}...")
-            try:
-                write_to_csv(timestamped_filename)
-            except IOError as e_fallback:
-                print(f"Still unable to export financial plan (even with timestamp) due to: {e_fallback}")
-            except Exception as e_gen:
-                print(f"An unexpected error occurred during timestamped export: {e_gen}")
+            print(f"  - {debt_name}: Beg Bal: ${current_balance:.2f}{fee_print_str}"
+                  f", Interest: ${interest_accrued_this_month:.2f}, Paid: ${payments_this_month:.2f}, End Bal: ${new_balance:.2f}")
+            
+        # Move to the next month
+        simulation_months_counter += 1
+        if month == 12:
+            current_sim_date = current_sim_date.replace(year=year + 1, month=1)
         else:
-            print(f"Error exporting financial plan to {base_filename}: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred during export: {e}")
+            current_sim_date = current_sim_date.replace(month=month + 1)
+        
+        if all(d['current_balance'] <= 0 for d in live_debt_accounts.values()):
+            print("\nAll active debts paid off before end of simulation period!")
+            break
+
+    # Final reporting outside the loop
+    print(f"\n--- Debt Simulation Summary (as of {current_sim_date.strftime('%Y-%m-%d') if simulation_months_counter < 120 else 'End of 10-year cap'}) ---")
+    all_paid_off_final = True
+    for debt_name, debt_data in live_debt_accounts.items():
+        if debt_data['current_balance'] > 0:
+            print(f"  - {debt_name}: Remaining Balance: ${debt_data['current_balance']:.2f}")
+            all_paid_off_final = False
+        else:
+            print(f"  - {debt_name}: Paid off!")
+    
+    if all_paid_off_final:
+        print("All debts successfully paid off within the planning period!")
+    else:
+        print("Some debts remain outstanding at the end of the planning period.")
+
+    return live_debt_accounts
+
+
+def generate_spreadsheet_output(final_pay_periods, debt_progress_report):
+    """
+    Generates an Excel spreadsheet with the financial plan and debt progress, including charts.
+    """
+    output_dir = 'data'
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, 'financial_plan.xlsx')
+
+    with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+        # Get the xlsxwriter workbook and worksheet objects
+        workbook = writer.book
+
+        # --- Sheet 1: Paycheck Summary (High-Level) ---
+        paycheck_summary_data = []
+        for pp in final_pay_periods:
+            row = {
+                'Pay Date': pp['pay_date'].strftime('%Y-%m-%d'),
+                'Net Pay': pp['net_pay'],
+                'Initial Balance for Period': pp['initial_balance_for_period'],
+                'Remaining Balance': pp['remaining_balance']
+            }
+            assigned_bills_str = "; ".join([
+                f"{b['name']} (Due: {b['due_date'].strftime('%m-%d')}) - ${b['amount']:.2f}"
+                for b in pp['assigned_bills']
+            ])
+            row['Assigned Bills'] = assigned_bills_str
+            paycheck_summary_data.append(row)
+        
+        df_paychecks_summary = pd.DataFrame(paycheck_summary_data)
+        df_paychecks_summary.to_excel(writer, sheet_name='Paycheck Summary', index=False)
+
+
+        # --- Sheet 2: Paycheck Details (For Charting and Granular View) ---
+        paycheck_details_data = []
+        for pp in final_pay_periods:
+            if pp['assigned_bills']:
+                for bill in pp['assigned_bills']:
+                    paycheck_details_data.append({
+                        'Pay Date': pp['pay_date'].strftime('%Y-%m-%d'),
+                        'Bill Name': bill['name'],
+                        'Bill Due Date': bill['due_date'].strftime('%Y-%m-%d'),
+                        'Amount Assigned': bill['amount'],
+                        'Category': bill['category'] # Added category for potential future use or charting by category
+                    })
+            # Add remaining balance as a "bill" for charting purposes if desired
+            paycheck_details_data.append({
+                'Pay Date': pp['pay_date'].strftime('%Y-%m-%d'),
+                'Bill Name': 'Remaining Balance',
+                'Bill Due Date': '', # N/A for remaining balance
+                'Amount Assigned': pp['remaining_balance'],
+                'Category': 'Savings/Buffer' # Categorize remaining balance
+            })
+        
+        df_paycheck_details = pd.DataFrame(paycheck_details_data)
+        df_paycheck_details.to_excel(writer, sheet_name='Paycheck Details', index=False)
+
+        # --- Sheet 3: Debt Progress ---
+        if debt_progress_report:
+            all_debt_history = []
+            for debt_name, debt_data in debt_progress_report.items():
+                for month_snapshot in debt_data['history']:
+                    row = {
+                        'Debt Name': debt_name,
+                        'Date': month_snapshot['date'].strftime('%Y-%m-%d'),
+                        'Balance Start of Month': month_snapshot['balance_start_of_month'],
+                        'Total Fees Charged': month_snapshot['total_fees_charged'],
+                        'Payments Made': month_snapshot['payments_made'],
+                        'Interest Accrued': month_snapshot['interest_accrued'],
+                        'Principal Paid': month_snapshot['principal_paid'],
+                        'Balance End of Month': month_snapshot['balance_end_of_month']
+                    }
+                    all_debt_history.append(row)
+            
+            if all_debt_history:
+                df_debt_progress = pd.DataFrame(all_debt_history)
+                df_debt_progress.to_excel(writer, sheet_name='Debt Progress', index=False)
+            else:
+                print("No debt history to write to spreadsheet.")
+        else:
+            print("No debt progress report available to write to spreadsheet.")
+
+
+        # --- Sheet 4: Paycheck Overview Chart (using data from Paycheck Details) ---
+        # Prepare data for the chart by pivoting the paycheck details
+        # This will create columns for each unique Bill Name
+        df_chart_data = df_paycheck_details.pivot_table(
+            index='Pay Date',
+            columns='Bill Name',
+            values='Amount Assigned',
+            aggfunc='sum'
+        ).fillna(0) # Fill NaN for bills not present in a given paycheck
+
+        # Sort columns to ensure 'Remaining Balance' is typically last for better stacked chart visual
+        # Get all bill names except 'Remaining Balance'
+        bill_columns = [col for col in df_chart_data.columns if col != 'Remaining Balance']
+        # Reorder columns: bill names first, then 'Remaining Balance'
+        ordered_columns = bill_columns + ['Remaining Balance']
+        df_chart_data = df_chart_data[ordered_columns]
+
+
+        # Write the pivoted data to a new sheet for the chart
+        # This sheet can be hidden or used as the source for the chart tab
+        df_chart_data.to_excel(writer, sheet_name='Chart Data', index=True) # index=True to keep 'Pay Date' as a column
+
+        # Get the worksheet object for the Chart Data sheet
+        worksheet_chart_data = writer.sheets['Chart Data']
+
+        # Create a new chart object.
+        chart = workbook.add_chart({'type': 'column'})
+
+        # Configure the chart series.
+        # Data is in 'Chart Data' sheet. Headers are in row 1, data starts from row 2.
+        num_paychecks = len(df_chart_data)
+        num_bill_types = len(df_chart_data.columns) # Number of columns in df_chart_data
+
+        # Category axis (Pay Dates)
+        chart.set_x_axis({'name': 'Paycheck Date'})
+        chart.set_y_axis({'name': 'Amount ($)', 'num_format': '$#,##0'})
+
+        # Add series for each bill name and Remaining Balance
+        # Loop through columns of df_chart_data (starting from the second column as the first is 'Pay Date')
+        for i, col_name in enumerate(df_chart_data.columns):
+            chart.add_series({
+                'name':       ['Chart Data', 0, i + 1], # Sheet name, row 0 (header), column index + 1 (A=0, B=1, C=2...)
+                'categories': ['Chart Data', 1, 0, num_paychecks, 0], # Sheet name, first data row (1), col 0 (Pay Date), last data row, col 0
+                'values':     ['Chart Data', 1, i + 1, num_paychecks, i + 1], # Sheet name, first data row (1), col index + 1, last data row, col index + 1
+                'data_labels': {'value': True, 'num_format': '$#,##0'}, # Add data labels for clarity
+            })
+
+        # Set chart title
+        chart.set_title({'name': 'Paycheck Expense Breakdown'})
+        
+        # Set the chart to be a stacked column chart
+        chart.set_plotarea({'area': {'fill': {'none': True}}}) # Remove plot area background
+        chart.set_chartarea({'border': {'none': True}}) # Remove chart area border
+        
+        # Hide the legend for now if too many items, or put it at bottom
+        chart.set_legend({'position': 'bottom'})
+
+
+        # Insert the chart into a new sheet called 'Paycheck Chart'
+        chart_sheet = workbook.add_worksheet('Paycheck Chart')
+        chart_sheet.insert_chart('A1', chart) # Insert the chart at cell A1
+
+
+    print(f"\nSpreadsheet generated successfully at: {output_file}")
+
+
+def main_menu():
+    """
+    Main menu function for the MonteBuster Debt Simulator.
+    Allows user to manage bills, run simulations, and generate reports.
+    """
+    bills = load_bills() # Load existing bill templates
+
+    while True:
+        print("\n--- MonteBuster Main Menu ---")
+        print("1. Add a new bill")
+        print("2. View/Edit bills") # Updated menu option
+        print("3. Run Financial Plan Simulation")
+        print("4. Exit")
+
+        choice = get_user_input("Enter your choice: ").strip()
+
+        if choice == '1':
+            new_bill = add_bill()
+            bills.append(new_bill)
+            save_bills(bills)
+            print(f"Bill '{new_bill['name']}' added successfully.")
+        elif choice == '2':
+            # Sub-menu for View/Edit
+            while True:
+                print("\n--- View/Edit Bills Menu ---")
+                print("1. View all bills")
+                print("2. Edit a bill")
+                print("0. Back to Main Menu")
+                edit_choice = get_user_input("Enter your choice: ").strip()
+
+                if edit_choice == '1':
+                    view_bills(bills)
+                elif edit_choice == '2':
+                    edit_bill(bills)
+                elif edit_choice == '0':
+                    break # Exit sub-menu
+                else:
+                    print("Invalid choice. Please try again.")
+        elif choice == '3':
+            if not bills:
+                print("No bills loaded. Please add some bills first.")
+                continue
+
+            print("\n--- Financial Plan Simulation Setup ---")
+            # Corrected example for bi-weekly paychecks in a year
+            num_paychecks_str = get_user_input("Enter number of paychecks to simulate (e.g., 26 for a year, if bi-weekly): ").strip()
+            try:
+                num_paychecks = int(num_paychecks_str)
+                if num_paychecks <= 0:
+                    print("Number of paychecks must be positive.")
+                    continue
+            except ValueError:
+                print("Invalid input. Please enter an integer.")
+                continue
+
+            net_pay_str = get_user_input("Enter your net pay per paycheck: $").strip().replace('$', '')
+            try:
+                net_pay = float(net_pay_str)
+                if net_pay < 0:
+                    print("Net pay cannot be negative.")
+                    continue
+            except ValueError:
+                print("Invalid input. Please enter a numerical value.")
+                continue
+
+            start_date_input = get_user_date_input("Enter the date of your first paycheck (YYYY-MM-DD): ")
+
+            # Generate bill instances for the simulation period
+            # Need to define an end_date for generate_bill_instances
+            # Let's make it cover the period of the paychecks plus a buffer
+            simulation_end_date = start_date_input + timedelta(weeks=2 * num_paychecks) + timedelta(days=31)
+            bill_instances = generate_bill_instances(bills, start_date_input, simulation_end_date)
+            
+            # Filter debt templates to pass to simulate_debt_progress
+            debt_templates = [b for b in bills if b.get('is_debt', False)]
+
+            # Assign bills to paychecks
+            final_pay_periods = assign_bills_to_paychecks(bill_instances, num_paychecks, net_pay, start_date_input)
+            
+            # Display summary
+            display_paycheck_summary(final_pay_periods)
+
+            # Simulate debt progress
+            debt_progress_report = simulate_debt_progress(debt_templates, final_pay_periods)
+
+            # Generate spreadsheet
+            generate_spreadsheet_output(final_pay_periods, debt_progress_report)
+
+        elif choice == '4':
+            print("Exiting MonteBuster. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 if __name__ == "__main__":
-    print("--- Welcome to Monte Buster ---")
-
-    # 1. Get User Pay Info
-    user_pay_details = get_user_pay_info()
-
-    # 2. Generate Pay Periods
-    generated_pays = generate_pay_periods(user_pay_details)
-
-    # 3. Load existing bills first
-    bills_filename = "data/bills.json"
-    template_bills = load_bills(bills_filename) # Always attempt to load existing bills
-
-    # 4. Give the option to add more bills (or new ones if none were loaded)
-    print(f"\nCurrently managing {len(template_bills)} template bills.")
-    
-    # Use a loop to allow adding multiple new bills in one session if desired
-    while True:
-        add_more_choice = input("Do you want to add NEW bills or modify existing ones? (yes/no): ").lower().strip()
-        if add_more_choice == "yes":
-            # If the user wants to add, call get_user_bills which loops until they say 'no'
-            newly_added_bills = get_user_bills()
-            template_bills.extend(newly_added_bills) # Add the new bills to the existing list
-            save_bills(template_bills, bills_filename) # Save the updated list immediately
-            print("\nBills list updated and saved.")
-            # After adding, give them the option to add even more, or proceed
-            continue # Loop back to ask if they want to add more
-        elif add_more_choice == "no":
-            break # Exit the loop if they don't want to add more
-        else:
-            print("Invalid choice. Please enter 'yes' or 'no'.")
-
-
-    print(f"\nFinal list of {len(template_bills)} template bills:")
-    for bill in template_bills:
-        print(f"  - Bill: {bill['name']}, Due: {bill['due_date']}, Amount: ${bill['amount']:.2f}, Recurring: {bill['is_recurring']}")
-
-    # 5. Generate all future bill instances (for recurring bills)
-    all_bill_instances = generate_future_bill_instances(template_bills)
-    print(f"\nGenerated {len(all_bill_instances)} total bill instances for planning until end of 2025.")
-
-    # 6. Assign Bills to Paychecks
-    final_pay_periods, unassigned_bills = assign_bills_to_paychecks(generated_pays, all_bill_instances)
-
-    # 7. Display Summary (to console)
-    display_paycheck_summary(final_pay_periods, unassigned_bills)
-
-    # 8. Generate Spreadsheet Output (this will always overwrite for a fresh plan)
-    generate_spreadsheet_output(final_pay_periods, "data/financial_plan.csv")
+    main_menu()

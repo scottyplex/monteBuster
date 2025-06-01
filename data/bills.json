@@ -28,5 +28,38 @@
         "is_recurring": true,
         "recurrence_frequency": "monthly",
         "paid_by_paycheck_date": null
+    },
+    {
+        "id": "4bb957ae-b88f-4e6b-9b1b-936177e236b6",
+        "name": "Phone",
+        "due_date": "2025-06-14",
+        "amount": 114.0,
+        "category": "Utilities",
+        "is_debt": false,
+        "initial_balance": null,
+        "current_balance": null,
+        "minimum_payment": null,
+        "interest_rate": null,
+        "credit_limit": null,
+        "is_recurring": true,
+        "recurrence_frequency": "monthly",
+        "paid_by_paycheck_date": null
+    },
+    {
+        "id": "3ffe494b-ed1d-4546-9562-3b702fff641a",
+        "name": "Scottys Credit Card",
+        "due_date": "2025-06-08",
+        "amount": 75.0,
+        "category": "Credit Card",
+        "is_debt": true,
+        "initial_balance": 750.0,
+        "current_balance": 750.0,
+        "minimum_payment": 35.0,
+        "interest_rate": 0.2949,
+        "credit_limit": 1000.0,
+        "is_recurring": true,
+        "recurrence_frequency": "monthly",
+        "paid_by_paycheck_date": null,
+        "monthly_fee": 10.0
     }
 ]
